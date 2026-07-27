@@ -1,7 +1,7 @@
 # FoodMind AD Project — Canonical AI Context and Tutoring Guide
 
-**Version:** 2.0  
-**Date:** 27 July 2026  
+**Version:** 2.1
+**Date:** 28 July 2026
 **Project:** NUS-ISS GDipSA AD Project  
 **Team reference:** Team 5  
 **Purpose:** This document is a reusable project handover and tutoring brief. Give the entire document to any AI assistant that will help with FoodMind. It explains the project, confirmed decisions, scope, architecture, repository boundaries, access model, machine-learning design, delivery plan, current status, known inconsistencies, and the way the user should be tutored.
@@ -109,28 +109,30 @@ FoodMind must demonstrate one cohesive end-to-end solution containing:
 | Public business backend | Java 17, Spring Boot, Spring Security, JWT, JPA, Bean Validation, Flyway, OpenAPI |
 | Database | PostgreSQL |
 | Optional image storage | Amazon S3; PostgreSQL stores object keys and metadata |
-| Agent service | Private FastAPI service using LangGraph and Pydantic |
-| ML service | Private FastAPI service using scikit-learn and joblib |
+| Agent service | Private FastAPI service using LangGraph and Pydantic in `foodmind-intelligence` |
+| Runtime inference service | Private FastAPI service using scikit-learn and joblib in `foodmind-intelligence` |
+| ML training | Offline training, evaluation, and model packaging in `foodmind-ml` |
 | Recommendation approach | Hard rules + cosine-similarity UserCF + cosine-similarity ItemCF + Logistic Regression |
 | Agents | Five controlled Agents with allow-listed tools |
 | Search | PostgreSQL full-text search or trigram search over authorised platform content |
 | Cloud | Vercel for Web; AWS ECS Fargate and ALB for backend services; RDS for PostgreSQL; S3 for photos |
 | CI/CD and security | GitHub Actions, automated tests, Trivy, OWASP ZAP, secret/dependency checks |
 | Source control | GitHub Organization with separate private repositories; no monorepo |
-| Repository grouping | Four code repositories plus one restricted documentation repository |
+| Repository grouping | Five code repositories plus one restricted documentation repository |
 | Delivery window | Four one-week sprints |
 
 ### Architecture authority
 
 - **Spring Boot is the only public business API and security boundary.**
-- Android and Web never call an Agent or ML service directly.
+- Android and Web never call an Agent or inference service directly.
 - FastAPI services are private and accept only controlled internal requests.
 - Spring Boot owns authentication, authorisation, domain rules, persistence, audit records, search permissions, and analytics.
 - Agents do not access PostgreSQL directly.
-- The Agent service may call narrow, allow-listed Spring Boot internal tools and the private ML service.
+- The Agent service may call narrow, allow-listed Spring Boot internal tools and the private inference service.
 - Spring Boot validates structured Agent output before storing or returning it.
 - Source-code access is isolated by repository and team responsibility.
-- The Agent service and ML service remain logically separate even when stored together in the private `foodmind-intelligence` repository.
+- The Agent service and inference service remain logically separate inside the private `foodmind-intelligence` repository.
+- Offline training, evaluation, and release packaging belong to the separate `foodmind-ml` repository; Intelligence consumes an immutable released model package.
 
 ---
 
@@ -506,7 +508,7 @@ When there is insufficient UserCF or ItemCF data:
 - Keep the CF availability flag as `false`.
 - Do not treat a missing score as dislike.
 - Rely on explicit preferences, current context, seed data, group ratings, and deterministic rules.
-- If the ML service fails or times out, use a deterministic fallback ranking.
+- If the runtime inference service fails or times out, use a deterministic fallback ranking.
 - Return `modelStatus` or `fallbackStatus` in the structured response.
 
 ### Step 8 — Diversity and explanation
@@ -587,7 +589,7 @@ flowchart TD
     C --> D["PostgreSQL / RDS"]
     C --> E["S3 Photo Storage"]
     C --> F["Private Multi-Agent Service"]
-    F --> G["Private Hybrid ML Service"]
+    F --> G["Private Runtime Inference Service"]
     F --> C
 ```
 
@@ -621,7 +623,7 @@ Owns:
 - Group feed
 - Candidate retrieval
 - Search authorisation
-- Agent/ML orchestration
+- Agent/inference orchestration
 - Persistence
 - Analytics aggregation
 - Audit and trace correlation
@@ -640,7 +642,7 @@ Owns:
 
 It receives only authorised context or uses narrow internal tools.
 
-#### Private Hybrid ML Service
+#### Private Runtime Inference Service
 
 Owns:
 
@@ -648,8 +650,19 @@ Owns:
 - ItemCF feature generation
 - Logistic Regression inference
 - Model loading/versioning
-- Offline training/evaluation scripts
 - Model status and fallback-compatible response schemas
+
+#### Offline ML Training Repository
+
+Owns:
+
+- Dataset definitions and validation
+- Feature engineering and collaborative-filtering experiments
+- Logistic Regression training
+- Offline evaluation and leakage checks
+- Model cards, release manifests, and immutable model-package publication
+
+The runtime inference service validates and loads a released package; it does not train models.
 
 #### PostgreSQL
 
@@ -673,7 +686,7 @@ Stores optional image objects only. PostgreSQL stores object keys, ownership, co
 - React Web: Vercel with HTTPS
 - Spring Boot: Docker container on AWS ECS Fargate behind ALB
 - Multi-Agent service: private ECS service
-- ML service: private ECS service
+- Runtime inference service: private ECS service
 - PostgreSQL: Amazon RDS in a private network
 - Images: S3
 - Secrets: AWS Secrets Manager or equivalent secure CI/CD secrets
@@ -681,7 +694,7 @@ Stores optional image objects only. PostgreSQL stores object keys, ownership, co
 
 ### Important architecture consistency rule
 
-Older artifacts sometimes describe one combined FastAPI Agent-and-ML service. The latest architecture treats Agent and ML as two private logical services. If the team later combines them into one deployable container to reduce MVP operational cost, the Agent and ML modules and contracts should remain logically separate, and every Proposal, diagram, script, and README must be updated consistently.
+Older artifacts sometimes describe one combined FastAPI Agent-and-ML service. The latest runtime architecture keeps Agent and inference as two private logical services inside `foodmind-intelligence`, while offline training and model release live in `foodmind-ml`. If the team later combines the two runtime services into one deployable container to reduce MVP operational cost, their modules and contracts must remain logically separate. Every Proposal, diagram, script, and README must use the same separation.
 
 ---
 
@@ -699,23 +712,24 @@ The main reason is access and cognitive isolation rather than Git transfer size:
 - Each repository can have its own Issues, Pull Requests, CI workflow, secrets, and deployment process.
 - GitHub permissions apply at repository level; they cannot safely hide selected folders inside one repository from a member who can clone that repository.
 
-The exact GitHub Organization name has not yet been confirmed. `foodmind-team` is a recommended placeholder only.
+The repositories currently use the GitHub Organization name `foodmind-team`. Organization roles, team membership, and branch-protection settings still require explicit verification.
 
-### Recommended five-repository layout
+### Confirmed six-repository layout
 
 | Repository | Responsibility | Main contents | Typical access |
 |---|---|---|---|
 | `foodmind-backend` | Public business API and system of record | Spring Boot, JWT, business modules, JPA, Flyway, PostgreSQL integration, public OpenAPI contract | Backend members; project owner/admin |
 | `foodmind-web` | Browser client | React, TypeScript, Vite, Tailwind CSS, TanStack Query, Recharts | Web members; project owner/admin |
 | `foodmind-android` | Native mobile client | Kotlin, Jetpack Compose, Navigation, ViewModel, StateFlow, Retrofit, Vico | Android members; project owner/admin |
-| `foodmind-intelligence` | Private AI and ML logic | `agent-service` and `ml-service` as logically separate modules, shared private schemas, model artifacts, evaluation scripts | Agent/ML members; backend integrator; project owner/admin |
+| `foodmind-intelligence` | Private runtime AI and inference | `agent-service`, `inference-service`, internal schemas, model-package consumer, runtime deployment | Agent/runtime members; backend integrator; project owner/admin |
+| `foodmind-ml` | Offline ML training and release | Data validation, feature engineering, UserCF/ItemCF, LR training, evaluation, model cards, immutable model packaging | ML members; Intelligence integrator; project owner/admin |
 | `foodmind-docs` | Restricted system-level source of truth | Architecture, ERD, ADRs, system contracts, project plans, UAT evidence, integration runbooks | Project owner and selected core members |
 
-This is a **four-code-repository plus one restricted-documentation-repository** model.
+This is a **five-code-repository plus one restricted-documentation-repository** model.
 
 ### Required internal structure of `foodmind-intelligence`
 
-The repository may contain both private Python services to reduce repository and permission overhead, but they must remain separate:
+The repository contains both private runtime Python services, but they must remain separate:
 
 ```text
 foodmind-intelligence/
@@ -729,25 +743,45 @@ foodmind-intelligence/
 │   ├── tests/
 │   ├── Dockerfile
 │   └── pyproject.toml
-├── ml-service/
+├── inference-service/
 │   ├── app/
-│   │   ├── collaborative/
 │   │   ├── features/
 │   │   ├── inference/
+│   │   ├── model_registry/
 │   │   ├── schemas/
 │   │   └── main.py
-│   ├── training/
-│   ├── evaluation/
-│   ├── models/
 │   ├── tests/
 │   ├── Dockerfile
 │   └── pyproject.toml
 ├── contracts/
-│   └── internal/
+│   ├── internal/
+│   └── model-package/
 └── README.md
 ```
 
-The two modules may later be deployed as two ECS services or, if the four-week MVP requires it, as one container with two logical application boundaries. Combining the deployment unit does not permit the Agent code to become the model implementation or to access PostgreSQL directly.
+The two runtime modules may later be deployed as two ECS services or, if the four-week MVP requires it, as one container with two logical application boundaries. Combining the deployment unit does not permit the Agent code to become the model implementation or to access PostgreSQL directly.
+
+### Required internal structure of `foodmind-ml`
+
+```text
+foodmind-ml/
+├── data/
+├── configs/
+├── notebooks/
+├── src/foodmind_ml/
+│   ├── data/
+│   ├── features/
+│   ├── collaborative/
+│   ├── training/
+│   ├── evaluation/
+│   └── packaging/
+├── tests/
+├── reports/
+├── contracts/model-package/
+└── docs/model-cards/
+```
+
+`foodmind-ml` publishes a versioned model package with a manifest, schemas, metrics, model-card reference, and checksums. `foodmind-intelligence` validates and loads that package for runtime inference.
 
 ### Access-control model
 
@@ -755,14 +789,15 @@ Recommended GitHub Organization roles:
 
 - The user/project lead: Organization Owner and repository Admin for all repositories.
 - One backup core member: carefully selected backup administrator if required.
-- Backend team: write access to `foodmind-backend`; read or integration access to `foodmind-intelligence` only when necessary.
+- Backend team: write access to `foodmind-backend`; contract-level integration access to `foodmind-intelligence` only when necessary.
 - Web team: write access to `foodmind-web`; no backend source access is required to consume the public API.
 - Android team: write access to `foodmind-android`; no backend source access is required to consume the public API.
-- Agent/ML team: write access to `foodmind-intelligence`.
+- Agent/runtime team: write access to `foodmind-intelligence`.
+- ML training team: write access to `foodmind-ml`; access to runtime model-package fixtures when necessary.
 - Core documentation members: access to `foodmind-docs`.
 - Ordinary contributors: no Organization Owner role and no automatic access to unrelated private repositories.
 
-Create GitHub Teams such as `backend`, `web`, `android`, `intelligence`, and `core-docs`, then grant each team access only to its repository. The exact member assignment remains an unresolved project-management decision.
+Create GitHub Teams such as `backend`, `web`, `android`, `intelligence`, `ml`, and `core-docs`, then grant each team access only to its repository. The exact member assignment remains an unresolved project-management decision.
 
 ### What every contributor is allowed to know
 
@@ -809,12 +844,21 @@ When the public contract changes:
 
 #### Private contracts
 
-`foodmind-intelligence` owns schemas for:
+`foodmind-intelligence` owns runtime schemas for:
 
 - Spring Boot to Agent requests and responses
-- Agent to ML inference requests and responses
+- Agent to inference-service requests and responses
 - Structured recommendation results
 - Model status, fallback status, reason codes, source references, and trace IDs
+
+`foodmind-ml` owns the producer side of the versioned model-package contract:
+
+- Model manifest and checksums
+- Feature-schema version
+- Inference-contract compatibility
+- Evaluation summary and model-card reference
+
+`foodmind-intelligence` owns the matching consumer validation and fixtures.
 
 Spring Boot must keep a matching client DTO and contract test. Private service endpoints are never documented as client-facing features.
 
@@ -825,8 +869,10 @@ flowchart TD
     A["Web repository"] --> C["Backend contract"]
     B["Android repository"] --> C
     C --> D["Spring Boot service"]
-    D --> E["Agent module"]
-    E --> F["ML module"]
+    D --> E["Agent service"]
+    E --> F["Runtime inference service"]
+    G["Offline ML training repository"] --> H["Immutable model package"]
+    H --> F
 ```
 
 The diagram shows contract dependencies, not shared source-code dependencies.
@@ -887,7 +933,8 @@ Each code repository builds and tests only its own component:
 - `foodmind-backend`: Java build, unit/integration tests, container scan, backend deployment.
 - `foodmind-web`: lint, type check, unit tests, production build, Vercel deployment.
 - `foodmind-android`: Gradle build, unit tests, debug APK artifact.
-- `foodmind-intelligence`: Python lint/type checks, Agent tests, ML tests, evaluation reproducibility, two container builds when deployed separately.
+- `foodmind-intelligence`: Python lint/type checks, Agent tests, inference/model-load tests, contract tests, and runtime container builds.
+- `foodmind-ml`: Data/feature tests, UserCF/ItemCF toy-matrix tests, training reproducibility, evaluation reports, and model-package validation.
 
 Cross-system UAT is coordinated from the restricted documentation/integration process, not by giving every contributor access to every repository.
 
@@ -899,7 +946,7 @@ Use stable environment names:
 - `staging`
 - `production-demo`
 
-Android and Web should be configurable by base URL and must never hardcode secrets. The clients need only the Spring Boot URL. Spring Boot owns the private Agent and ML service URLs.
+Android and Web should be configurable by base URL and must never hardcode secrets. The clients need only the Spring Boot URL. Spring Boot owns the private Agent and inference-service URLs.
 
 For local end-to-end integration, the core integrator may clone the authorised repositories as sibling folders and use a restricted orchestration file or runbook. Do not commit real secrets or distribute full-system credentials to the entire team.
 
@@ -998,7 +1045,7 @@ Private endpoints require service authentication and are never exposed to Androi
 3. Spring Boot retrieves only authorised candidates and evidence.
 4. Hard rules remove invalid candidates.
 5. Feature vectors are created.
-6. The private ML service returns scores and model metadata.
+6. The private runtime inference service returns scores and model metadata.
 7. The Recommendation Agent applies diversity and converts reason codes into grounded text.
 8. Spring Boot validates the result.
 9. Spring Boot stores the session, candidates, scores, reasons, and model/fallback version.
@@ -1081,7 +1128,7 @@ Total planned size: **123 team-relative story points**.
 - UI storyboard
 - ERD and logical data model
 - API contracts
-- Create the GitHub Organization, five private repositories, GitHub Teams, access rules, branch protection, baseline READMEs, and CI foundations
+- Verify the GitHub Organization, six private repositories, GitHub Teams, access rules, branch protection, baseline READMEs, and CI foundations
 - JWT and preferences
 - Authorisation rules
 - Shared seed catalogue
@@ -1156,15 +1203,21 @@ A feature is done only when:
 - Timeout and invalid-output tests
 - Grounding/source-reference tests
 
-### ML service
+### Runtime inference service
 
 - Feature transformation tests
 - UserCF and ItemCF toy-matrix tests
 - Cold-start tests
 - Model load/version tests
 - Deterministic fallback tests
+
+### Offline ML training repository
+
+- Dataset validation and provenance tests
+- Training reproducibility tests
 - Evaluation report reproducibility
 - Data-leakage checks
+- Model-package manifest and checksum tests
 
 ### Android and Web
 
@@ -1218,14 +1271,14 @@ When advising priorities, prefer one complete, secure, tested vertical slice ove
 
 ---
 
-## 16. Current Status as of 27 July 2026
+## 16. Current Status as of 28 July 2026
 
 ### Completed or substantially prepared
 
 - Project concept and problem origin
 - Final Proposal
 - Revised 10-minute presentation script
-- Proposal-aligned 13-slide presentation
+- Proposal-aligned presentation deck; final slide-count reconciliation is still required
 - High-level use case diagram
 - High-level architecture diagram
 - Prioritised Product Backlog
@@ -1233,13 +1286,15 @@ When advising priorities, prefer one complete, secure, tested vertical slice ove
 - Initial Project Status workbook
 - Four-week scope and future-work boundary
 - Decision to use separate private repositories rather than a monorepo
-- Recommended four-code-repository plus one restricted-documentation-repository structure
+- Confirmed five-code-repository plus one restricted-documentation-repository structure
+- Six GitHub repositories and baseline directory frameworks
+- Repository-specific README and architecture/operations documentation on documentation branches
 - Initial repository access and collaboration model
 
 ### Not confirmed as implemented
 
-- GitHub Organization, repositories, Teams, permissions, and branch protection
-- Repository scaffolds, READMEs, and per-repository CI workflows
+- GitHub Teams, final permissions, and branch protection
+- Implemented per-repository CI workflows
 - Final ERD and database migrations
 - Final OpenAPI contracts
 - Complete Android application
@@ -1270,9 +1325,9 @@ An AI assistant must inspect the repository before stating that any unconfirmed 
 
 **Older wording:** One private FastAPI service runs both Agents and ML.
 
-**Latest architecture:** A private Multi-Agent FastAPI service and a separate private ML FastAPI service.
+**Latest architecture:** A private Multi-Agent FastAPI service and a separate runtime inference FastAPI service live in `foodmind-intelligence`. Offline training, evaluation, and model packaging live in `foodmind-ml`.
 
-**Action:** Use the latest logical split unless the team explicitly decides to merge deployment units. If changed, update every artifact consistently.
+**Action:** Preserve the logical runtime split even if both runtime services share a deployment unit. Preserve the repository boundary between offline training and runtime consumption. Update every artifact consistently.
 
 ### C. `MealNote` versus `FoodRecord`
 
@@ -1316,19 +1371,20 @@ Do not make the Chatbot the universal entry point for all AI features.
 
 **Obsolete recommendation:** One private monorepo containing Android, Web, Spring Boot, Agent, ML, and documentation.
 
-**Current confirmed direction:** Separate private repositories with repository-level access isolation. The recommended grouping is:
+**Current confirmed direction:** Separate private repositories with repository-level access isolation. The confirmed grouping is:
 
 - `foodmind-backend`
 - `foodmind-web`
 - `foodmind-android`
 - `foodmind-intelligence`
+- `foodmind-ml`
 - `foodmind-docs`
 
-The Agent and ML services remain logically separate modules inside `foodmind-intelligence`. Do not recreate a monorepo structure in new implementation advice unless the user explicitly reverses this decision.
+The Agent and runtime inference services remain logically separate modules inside `foodmind-intelligence`. Offline ML training and release packaging live in `foodmind-ml`; Intelligence consumes their immutable result. Do not recreate a monorepo structure in new implementation advice unless the user explicitly reverses this decision.
 
 ### I. GitHub names versus confirmed resources
 
-Repository and Organization names in this document are recommended names, not proof that the resources already exist. Inspect GitHub or the current workspace before claiming that any repository, team, branch rule, CI workflow, Issue, or secret has been created.
+The current local repositories confirm the `foodmind-team` Organization and the six repository names. This does not prove that GitHub Teams, branch rules, CI workflows, Issues, environments, or secrets have been configured. Inspect GitHub or the current workspace before claiming those resources exist.
 
 ---
 
@@ -1462,13 +1518,13 @@ Default answer: protect the MVP.
 
 Unless newer implementation work exists, the next AI should help the team do the following in order:
 
-1. Create the GitHub Organization and the five private repositories.
-2. Create GitHub Teams, assign least-privilege repository access, protect each `main` branch, and add baseline READMEs and `.env.example` files.
+1. Verify the GitHub Organization settings and the six private repositories.
+2. Review and merge the baseline READMEs, then create GitHub Teams, assign least-privilege repository access, protect each `main` branch, and add `.env.example` files.
 3. Confirm team member ownership for Android, Web, Spring Boot, Agents, ML, DevOps, testing, integration, and documentation.
-4. Synchronise the Proposal, PPT, diagrams, script, and this guide on UserCF/ItemCF, the two private FastAPI services, and the separate-repository model.
+4. Synchronise the Proposal, PPT, diagrams, script, and this guide on UserCF/ItemCF, the two private runtime FastAPI services, the offline ML training repository, and the separate-repository model.
 5. Finalise UC-01 to UC-09 acceptance criteria.
 6. Finalise the ERD, especially `Meal`, `FoodRecord`, `Place`, and Chatbot content references.
-7. Finalise the canonical public OpenAPI contract and the private Agent/ML schemas before independent repository implementation diverges.
+7. Finalise the canonical public OpenAPI contract, private Agent/inference schemas, and model-package contract before independent repository implementation diverges.
 8. Create the seed catalogue and ML interaction-data schemas.
 9. Scaffold per-repository CI and establish a staging Spring Boot URL or agreed mock contract for Android and Web.
 10. Build one baseline vertical slice:
