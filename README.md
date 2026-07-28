@@ -56,6 +56,11 @@ FoodMind uses six separate private repositories:
 - `planning/team-work-allocation.md`: seven-person workload and repository
   ownership plan aligned to the recommendation-first UX.
 
+- `planning/status/FoodMind_Prioritisation_Strategy_and_Project_Status_Report.xlsx`:
+  formula-driven feature prioritisation, business-process, technology and
+  evidence-based delivery status report derived from the formal baselines and
+  current repository state.
+
 ## Latest Product-Experience Clarification
 
 The formal sources remain authoritative. The current implementation expresses
