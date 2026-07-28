@@ -1,6 +1,6 @@
 # FoodMind AD Project — Canonical AI Context and Tutoring Guide
 
-**Version:** 2.1
+**Version:** 2.2
 **Date:** 28 July 2026
 **Project:** NUS-ISS GDipSA AD Project  
 **Team reference:** Team 5  
@@ -10,7 +10,11 @@
 
 ## 0. Instructions to the AI Assistant
 
-You are helping a NUS-ISS GDipSA student design, implement, explain, document, test, and present **FoodMind**. Treat this document as the current source of truth unless the user explicitly changes a decision.
+You are helping a NUS-ISS GDipSA student design, implement, explain, document,
+test, and present **FoodMind**. The formal Proposal and presentation are the
+primary scope and narrative baselines. Treat this guide as their implementation
+companion: it may clarify UX and engineering details, but it must not silently
+contradict or expand the formal MVP.
 
 ### How to communicate with the user
 
@@ -167,6 +171,25 @@ These workflows must remain independent:
    - Does not generate meal recommendations and does not call the recommendation model.
    - Does not generate cooking plans.
 
+### Recommendation-first home experience
+
+Android and Web organise the confirmed capabilities through the same product
+hierarchy:
+
+1. The top-level home switch contains **Eat out & delivery** and **Cooking**.
+2. **Eat out & delivery** is the default and owns the strongest call to action:
+   **Generate Recommendation**.
+3. The recommendation request uses the user's authorised history, current
+   context, and selected trusted-group evidence.
+4. The backend can return three intentionally different ordered candidates. The
+   client initially spotlights the lead candidate and exposes the remaining
+   candidates through an explicit “try another” action.
+5. Groups is a core shared decision workspace.
+6. Explore uses an image-led feed for authorised group-visible and curated
+   platform content. It is not the public/follower feed excluded from the MVP.
+7. Cooking uses manually entered or already authorised pantry/ingredient
+   context. Automatic inventory capture remains future work.
+
 ### Business requirements
 
 #### BR-01 — Identity and preferences
@@ -215,18 +238,30 @@ Users can:
 - Mark each record as `Private` or `Group`
 - Browse an authorised group feed
 - Save a shared item as `Want to Try`
+- Use the group as the recommendation context and share a selected result back
+  to the group
+- Discover authorised group-visible and curated content through the Explore
+  destination
 
-There is no public social feed in the MVP.
+There is no public or follower-based social feed in the MVP. Explore is a
+permission-safe presentation of existing authorised content, not a new
+visibility mode.
 
 #### BR-04 — Direct meal recommendation
 
-The user selects **Generate Food Recommendation**, optionally enters current context, and receives three explainable choices:
+The user selects **Generate Food Recommendation**, optionally enters current
+context and a trusted group, and receives an ordered set of up to three
+explainable choices:
 
 1. A high-confidence personal choice
 2. An exploratory choice
 3. A group-inspired choice
 
 The system removes invalid candidates before ranking and avoids recent repetition.
+
+The home initially displays the highest-ranked lead choice. “Try another”
+reveals another candidate from the same response; it does not silently create a
+new recommendation session.
 
 #### BR-05 — Feedback loop
 
@@ -245,12 +280,15 @@ Feedback is stored as separate events and can support future offline model retra
 
 Users enter:
 
-- Available ingredients
+- Available ingredients or manually maintained pantry context
 - Budget
 - Available time
 - Dietary rules
 
 The Cooking Planner Agent returns structured ingredients and ordered cooking steps based on a controlled recipe catalogue.
+
+The MVP does not automatically detect, purchase, or continuously synchronise
+inventory.
 
 #### BR-07 — Independent platform chatbot
 
@@ -280,6 +318,10 @@ The live dashboard and the weekly recap are different:
 - A **dashboard** is an interactive current view.
 - A **weekly recap** is a periodic summary report.
 
+Dashboard remains a confirmed capability, but it is not the default home-screen
+focus. Home prioritises the immediate meal decision; analytics remains
+available through its own destination.
+
 #### BR-09 — Android and Web parity
 
 Android and Web expose the same business capabilities, use the same REST contracts, permission rules, validation semantics, and backend metric definitions. Their visual layouts may differ.
@@ -299,6 +341,7 @@ All user-facing functionality passes through Spring Boot. At least one complete 
 - Personal history
 - Trusted groups and `Private`/`Group` visibility
 - Group feed and `Want to Try`
+- Recommendation-aware group context and permission-safe Explore composition
 - Hard-constraint filtering
 - Simple cosine-similarity UserCF
 - Simple cosine-similarity ItemCF
@@ -320,7 +363,7 @@ All user-facing functionality passes through Spring Boot. At least one complete 
 - Food delivery ordering
 - Payments
 - Public or follower-based social feeds
-- Automatic ingredient inventory
+- Automatic ingredient inventory capture or synchronisation
 - Automatic grocery purchasing
 - Image or food recognition
 - Push notifications
@@ -341,8 +384,8 @@ Simple UserCF and ItemCF are in the MVP. Only advanced Collaborative Filtering m
 |---|---|---|
 | UC-01 | Register, sign in, and manage profile/preferences | Compose/React, Spring Security, JWT, JPA, PostgreSQL |
 | UC-02 | Create, edit, delete, and filter food/drink records | Compose/React forms, Spring REST, JPA, S3 optional |
-| UC-03 | Create/join groups, browse group feed, save `Want to Try` | Group APIs, membership and visibility checks |
-| UC-04 | Generate three explainable meal recommendations | Recommendation Agent, rule tools, UserCF, ItemCF, LR |
+| UC-03 | Create/join groups, use shared group context, browse authorised Group/Explore content, save `Want to Try` | Group APIs, membership and visibility checks |
+| UC-04 | Generate an ordered set of up to three explainable recommendations and spotlight the lead result | Recommendation Agent, rule tools, UserCF, ItemCF, LR |
 | UC-05 | Accept, reject, re-recommend, and submit post-meal feedback | Feedback API, event records, offline retraining data |
 | UC-06 | Generate a cooking plan | Cooking Planner Agent, recipe catalogue, Pydantic |
 | UC-07 | Search authorised platform content through Chatbot | Chatbot Orchestrator, Platform Search Agent |
@@ -513,11 +556,16 @@ When there is insufficient UserCF or ItemCF data:
 
 ### Step 8 — Diversity and explanation
 
-Return three intentionally different options:
+Return up to three intentionally different options in stable order:
 
 1. **Personal:** highest-confidence match
 2. **Exploratory:** valid but less repetitive or slightly novel
 3. **Group-inspired:** supported by trusted-group evidence
+
+The first item is the lead recommendation shown on the home screen. The
+remaining items support the explicit “try another” interaction within the same
+session. The client does not discard their identifiers, types, evidence, or
+feedback semantics merely because only one card is visible at a time.
 
 The model score is not itself the explanation. Store structured reason codes such as:
 
@@ -560,7 +608,7 @@ For event data, a time-aware split is preferable to prevent future interactions 
 
 | Agent | Trigger | Main tools | Structured output | Must not do |
 |---|---|---|---|---|
-| Recommendation Agent | Generate Food Recommendation | Authorised context, candidate retrieval, hard filter, ML ranking, diversity, reason-code tools | Three grounded recommendation cards | Direct DB access, public web search, cooking, unsupported explanations |
+| Recommendation Agent | Generate Food Recommendation | Authorised context, candidate retrieval, hard filter, ML ranking, diversity, reason-code tools | Up to three ordered grounded candidates with a lead result | Direct DB access, public web search, cooking, unsupported explanations |
 | Cooking Planner Agent | Generate Cooking Plan | Recipe catalogue, ingredient matcher, budget/time/diet validator | Ingredients, ordered steps, warnings, source recipe ID | Recommendation ranking, Chatbot search, unsafe invented facts |
 | Chatbot Orchestrator | Chatbot message | Intent classification, conversation state, route selection | Route decision and final grounded response | Calling recommendation or cooking workflows |
 | Platform Search Agent | Search intent | Authorised Spring Boot search tool | Ranked Meal Note, Food Product, and Place references | Searching inaccessible data or public internet |
@@ -599,6 +647,9 @@ flowchart TD
 
 - Native Kotlin/Jetpack Compose UI
 - Same use cases and validation semantics as Web
+- Recommendation-first home with an **Eat out & delivery / Cooking** switch
+- Persistent Home, Groups, Explore, Saved, and Me navigation
+- One lead recommendation visible at a time from the ordered candidate set
 - Calls versioned Spring Boot REST endpoints
 - Uses Vico for charts
 - Does not contain authoritative business rules
@@ -607,6 +658,8 @@ flowchart TD
 
 - React/TypeScript responsive UI
 - Same business scope as Android
+- Recommendation-first responsive shell with the same two modes and labeled destinations
+- Permission-safe image-led Explore presentation for group-visible and curated content
 - Uses TanStack Query for server state
 - Uses Recharts for charts
 - Does not bypass Spring Boot
@@ -621,6 +674,7 @@ Owns:
 - Domain validation
 - CRUD and history
 - Group feed
+- Shared group recommendation context and permission-scoped Explore composition
 - Candidate retrieval
 - Search authorisation
 - Agent/inference orchestration
@@ -1015,6 +1069,7 @@ Exact DTOs and OpenAPI contracts must be finalised in Sprint 1. The following en
 - `/groups`
 - `/groups/{groupId}/members`
 - `/groups/{groupId}/feed`
+- permission-aware group/search endpoints used to compose Explore
 - `/want-to-try`
 - `/recommendations/generate`
 - `/recommendations/{sessionId}`
@@ -1049,8 +1104,9 @@ Private endpoints require service authentication and are never exposed to Androi
 7. The Recommendation Agent applies diversity and converts reason codes into grounded text.
 8. Spring Boot validates the result.
 9. Spring Boot stores the session, candidates, scores, reasons, and model/fallback version.
-10. Client receives three recommendation cards.
-11. Feedback is submitted through a separate endpoint and stored as an event.
+10. Client receives up to three ordered candidates and spotlights the lead result.
+11. “Try another” may reveal another returned candidate without creating a new session.
+12. Feedback is submitted through a separate endpoint and stored as an event.
 
 ### Contract requirements
 
@@ -1103,11 +1159,11 @@ Do not compute the same metric independently in Android and React. Shared backen
 |---:|---|---|---:|---|
 | 1 | PBI-01 | Identity, preferences, and hard constraints | 8 | S1 |
 | 2 | PBI-02 | Food and drink records | 8 | S2 |
-| 3 | PBI-03 | Three explainable recommendations | 8 | S3 |
+| 3 | PBI-03 | Recommendation-first home and up to three ordered explainable candidates | 8 | S3 |
 | 4 | PBI-04 | Hard-constraint filtering | 8 | S2 |
 | 5 | PBI-05 | UserCF, ItemCF, and LR ranking | 13 | S3 |
 | 6 | PBI-06 | Feedback and re-recommendation | 5 | S4 |
-| 7 | PBI-07 | Trusted groups and privacy | 8 | S2 |
+| 7 | PBI-07 | Trusted groups, shared decisions, permission-safe Explore, and privacy | 8 | S2 |
 | 8 | PBI-08 | Independent platform Chatbot | 8 | S3 |
 | 9 | PBI-09 | Cooking plan | 5 | S3 |
 | 10 | PBI-10 | Dashboard and weekly recap | 8 | S4 |
@@ -1126,6 +1182,7 @@ Total planned size: **123 team-relative story points**.
 
 - Confirm use cases and acceptance criteria
 - UI storyboard
+- Shared two-mode home shell and labeled navigation contract
 - ERD and logical data model
 - API contracts
 - Verify the GitHub Organization, six private repositories, GitHub Teams, access rules, branch protection, baseline READMEs, and CI foundations
@@ -1138,7 +1195,7 @@ Total planned size: **123 team-relative story points**.
 
 - Food and drink CRUD
 - History
-- Groups, visibility, group feed, and `Want to Try`
+- Groups, visibility, shared recommendation context, group feed, permission-safe Explore, and `Want to Try`
 - Authorised platform search
 - Hard-rule recommendation baseline
 - Working Android-to-Spring and Web-to-Spring vertical slices
@@ -1290,6 +1347,11 @@ When advising priorities, prefer one complete, secure, tested vertical slice ove
 - Six GitHub repositories and baseline directory frameworks
 - Repository-specific README and architecture/operations documentation on documentation branches
 - Initial repository access and collaboration model
+- Responsive Web recommendation-first UX prototype with the two-mode shell,
+  Groups, Explore, Saved, and profile views
+- Native Android recommendation-first UX prototype with mode switching,
+  recommendation generation, group context, Explore preview, and labeled bottom
+  navigation
 
 ### Not confirmed as implemented
 
@@ -1297,8 +1359,8 @@ When advising priorities, prefer one complete, secure, tested vertical slice ove
 - Implemented per-repository CI workflows
 - Final ERD and database migrations
 - Final OpenAPI contracts
-- Complete Android application
-- Complete React application
+- Production-complete Android application and backend integration
+- Production-complete React application and backend integration
 - Spring Boot implementation for the AD Project
 - Five-Agent implementation
 - UserCF/ItemCF/LR training and inference pipeline
@@ -1319,7 +1381,10 @@ An AI assistant must inspect the repository before stating that any unconfirmed 
 
 **Current canonical decision:** Simple cosine-similarity UserCF and ItemCF are part of the MVP and feed features into Logistic Regression. Matrix factorisation and deep recommenders remain future work.
 
-**Action:** Update every Proposal, diagram, script, model description, and backlog consistently.
+**Action:** Keep subordinate implementation documents and contracts consistent
+with the formal hybrid model. Do not edit the frozen Proposal or presentation
+during routine alignment; record any future formal revision as a separately
+approved submission task.
 
 ### B. Python service decomposition
 
@@ -1327,7 +1392,11 @@ An AI assistant must inspect the repository before stating that any unconfirmed 
 
 **Latest architecture:** A private Multi-Agent FastAPI service and a separate runtime inference FastAPI service live in `foodmind-intelligence`. Offline training, evaluation, and model packaging live in `foodmind-ml`.
 
-**Action:** Preserve the logical runtime split even if both runtime services share a deployment unit. Preserve the repository boundary between offline training and runtime consumption. Update every artifact consistently.
+**Action:** Preserve the logical runtime split even if both runtime modules
+share the single private FastAPI deployment shown in the formal material.
+Preserve the repository boundary between offline training and runtime
+consumption. Do not alter the frozen Proposal or presentation during routine
+documentation alignment.
 
 ### C. `MealNote` versus `FoodRecord`
 
@@ -1386,6 +1455,24 @@ The Agent and runtime inference services remain logically separate modules insid
 
 The current local repositories confirm the `foodmind-team` Organization and the six repository names. This does not prove that GitHub Teams, branch rules, CI workflows, Issues, environments, or secrets have been configured. Inspect GitHub or the current workspace before claiming those resources exist.
 
+### J. Product hierarchy versus capability scope
+
+The formal sources describe the complete capability set; the latest UX
+clarification defines how those capabilities are prioritised:
+
+- **Eat out & delivery** is the default home mode.
+- **Cooking** is the second home mode and remains a separate Agent path.
+- The recommendation CTA is the most prominent action.
+- One lead candidate is shown at a time, while the contract preserves up to
+  three ordered candidate types.
+- Groups is a core shared-decision destination.
+- Explore is an authorised group/curated content presentation, not the public
+  social feed excluded from the MVP.
+- Dashboard remains in scope but is no longer the default home emphasis.
+
+Do not reinterpret these presentation decisions as new public-search,
+automatic-inventory, ordering, payment, or follower-feed requirements.
+
 ---
 
 ## 18. Presentation Storyline
@@ -1408,6 +1495,8 @@ The clearest order is:
 
 ### Presentation guardrails
 
+- Treat `FoodMind_Presentation_Proposal.pptx` as a frozen formal baseline unless
+  the project owner explicitly opens a separate deck-revision task.
 - Keep slides concise; the spoken script carries the detail.
 - Use approximately 115–120 words per minute.
 - Explain only one end-to-end architecture path in detail.
@@ -1521,7 +1610,8 @@ Unless newer implementation work exists, the next AI should help the team do the
 1. Verify the GitHub Organization settings and the six private repositories.
 2. Review and merge the baseline READMEs, then create GitHub Teams, assign least-privilege repository access, protect each `main` branch, and add `.env.example` files.
 3. Confirm team member ownership for Android, Web, Spring Boot, Agents, ML, DevOps, testing, integration, and documentation.
-4. Synchronise the Proposal, PPT, diagrams, script, and this guide on UserCF/ItemCF, the two private runtime FastAPI services, the offline ML training repository, and the separate-repository model.
+4. Keep implementation READMEs, contracts, diagrams, and this guide aligned to
+   the frozen Proposal/PPT scope and the approved recommendation-first UX.
 5. Finalise UC-01 to UC-09 acceptance criteria.
 6. Finalise the ERD, especially `Meal`, `FoodRecord`, `Place`, and Chatbot content references.
 7. Finalise the canonical public OpenAPI contract, private Agent/inference schemas, and model-package contract before independent repository implementation diverges.
@@ -1532,8 +1622,8 @@ Unless newer implementation work exists, the next AI should help the team do the
     - save preferences
     - retrieve controlled candidates
     - apply hard rules
-    - return three fallback recommendations
-    - display the same result on Android and Web
+    - return up to three ordered fallback recommendations
+    - display the same lead result on Android and Web and expose the remaining candidates through “try another”
 11. Add UserCF, ItemCF, and Logistic Regression behind the established private contract.
 12. Add the remaining Agents without changing the public client contract.
 13. Add dashboards, cloud deployment, security evidence, cross-repository UAT, and final demonstration materials.
@@ -1549,7 +1639,11 @@ FoodMind should always be understood as one integrated decision-support product:
 - **UserCF and ItemCF** discover behavioural similarity.
 - **Logistic Regression** estimates acceptance probability.
 - **The Recommendation Agent** converts verified evidence into diverse, explainable choices.
+- **The recommendation-first home** spotlights one lead choice while preserving
+  the ordered Personal, Exploratory, and Group-inspired candidate set.
 - **The Cooking Planner** supports a separate cooking workflow.
+- **Groups and Explore** make authorised shared knowledge visible without
+  introducing a public social feed.
 - **The Chatbot Agents** make authorised platform knowledge searchable and reusable.
 - **Feedback** creates future learning signals.
 - **Dashboards and recaps** turn records into personal insight.

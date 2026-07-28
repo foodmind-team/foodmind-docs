@@ -2,7 +2,11 @@
 
 FoodMind Documentation is the restricted system-level source of truth for the FoodMind AD Project. It coordinates product scope, architecture, contracts, data design, delivery evidence, and cross-repository integration without exposing unrelated implementation code to every contributor.
 
-> **Current status:** the project proposal, presentation, and canonical AI context guide exist. The directory framework and repository-specific documentation are established, but many planned ERD, OpenAPI, ADR, UAT, security, and operations artifacts are not yet complete.
+> **Current status:** the formal Proposal and presentation are frozen reference
+> baselines. The canonical guide and repository documentation are being aligned
+> to the latest recommendation-first UX: a two-mode home, Groups as a core
+> shared workspace, and a permission-safe Explore destination. Many planned
+> ERD, OpenAPI, ADR, UAT, security, and operations artifacts remain incomplete.
 
 ## Repository Role
 
@@ -38,13 +42,38 @@ FoodMind uses six separate private repositories:
 
 ## Current Top-Level Documents
 
-- `FoodMind_AI_Project_Context_and_Tutoring_Guide.md`: canonical project context, confirmed decisions, scope, architecture, and implementation guidance.
+- `FoodMind_AI_Project_Context_and_Tutoring_Guide.md`: canonical implementation
+  and tutoring guide derived from the formal Proposal and presentation, plus
+  approved implementation-level clarifications that do not expand their MVP.
 
-- `Team5_AD_Project_Proposal.docx`: formal project proposal. It may lag behind later canonical decisions and must be synchronised before final submission.
+- `Team5_AD_Project_Proposal.docx`: formal project Proposal and primary scope
+  baseline. Do not edit it during routine documentation alignment.
 
-- `FoodMind_Presentation_Proposal.pptx`: presentation deck. Slide content and diagrams must be checked against the canonical guide before final use.
+- `FoodMind_Presentation_Proposal.pptx`: formal presentation and primary
+  narrative/architecture baseline. Do not edit it during routine documentation
+  alignment.
 
-- `planning/team-work-allocation.md`: proposed seven-person workload and repository ownership plan for the four-week MVP.
+- `planning/team-work-allocation.md`: seven-person workload and repository
+  ownership plan aligned to the recommendation-first UX.
+
+## Latest Product-Experience Clarification
+
+The formal sources remain authoritative. The current implementation expresses
+their scope through these UX decisions:
+
+- The home header switches between **Eat out & delivery** and **Cooking**.
+- **Eat out & delivery** is the default and presents the most prominent
+  Generate Recommendation action.
+- Recommendation uses the user's authorised history, trusted-group evidence,
+  current context, and the existing hybrid ranking design.
+- The backend may return three intentionally different candidates; clients show
+  one lead result at a time and expose the remaining candidates through “try
+  another”.
+- Groups is a core shared decision workspace.
+- Explore uses an image-led post layout for authorised group-visible and curated
+  content. It is not the public/follower feed excluded by the Proposal.
+- Cooking uses manually entered or already authorised pantry context. Automatic
+  inventory capture remains outside the MVP.
 
 ## Repository Structure
 
@@ -90,15 +119,18 @@ foodmind-docs/
 
 When artifacts conflict, apply this order:
 
-1. Explicit decision made by the project owner after the latest document date
-2. Accepted ADR
-3. Current canonical AI context guide
-4. Versioned public/private contracts
-5. ERD and data dictionary
-6. Proposal and presentation
-7. Historical planning notes
+1. Formal Proposal for product scope and requirements
+2. Formal presentation for the approved narrative and architecture summary
+3. Explicit project-owner clarification that does not contradict or expand the formal MVP
+4. Accepted ADR
+5. Current canonical AI context guide
+6. Versioned public/private contracts
+7. ERD and data dictionary
+8. Historical planning notes
 
-The conflict must still be fixed; precedence is not permission to leave final artifacts inconsistent.
+The conflict must still be fixed. If a proposed change would contradict or
+expand the formal sources, stop and obtain explicit approval before changing
+implementation documentation.
 
 ## Documentation Status Labels
 
