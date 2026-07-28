@@ -1,7 +1,7 @@
 # FoodMind AD Project — Canonical AI Context and Tutoring Guide
 
-**Version:** 2.0  
-**Date:** 27 July 2026  
+**Version:** 2.2
+**Date:** 28 July 2026
 **Project:** NUS-ISS GDipSA AD Project  
 **Team reference:** Team 5  
 **Purpose:** This document is a reusable project handover and tutoring brief. Give the entire document to any AI assistant that will help with FoodMind. It explains the project, confirmed decisions, scope, architecture, repository boundaries, access model, machine-learning design, delivery plan, current status, known inconsistencies, and the way the user should be tutored.
@@ -10,7 +10,11 @@
 
 ## 0. Instructions to the AI Assistant
 
-You are helping a NUS-ISS GDipSA student design, implement, explain, document, test, and present **FoodMind**. Treat this document as the current source of truth unless the user explicitly changes a decision.
+You are helping a NUS-ISS GDipSA student design, implement, explain, document,
+test, and present **FoodMind**. The formal Proposal and presentation are the
+primary scope and narrative baselines. Treat this guide as their implementation
+companion: it may clarify UX and engineering details, but it must not silently
+contradict or expand the formal MVP.
 
 ### How to communicate with the user
 
@@ -109,28 +113,30 @@ FoodMind must demonstrate one cohesive end-to-end solution containing:
 | Public business backend | Java 17, Spring Boot, Spring Security, JWT, JPA, Bean Validation, Flyway, OpenAPI |
 | Database | PostgreSQL |
 | Optional image storage | Amazon S3; PostgreSQL stores object keys and metadata |
-| Agent service | Private FastAPI service using LangGraph and Pydantic |
-| ML service | Private FastAPI service using scikit-learn and joblib |
+| Agent service | Private FastAPI service using LangGraph and Pydantic in `foodmind-intelligence` |
+| Runtime inference service | Private FastAPI service using scikit-learn and joblib in `foodmind-intelligence` |
+| ML training | Offline training, evaluation, and model packaging in `foodmind-ml` |
 | Recommendation approach | Hard rules + cosine-similarity UserCF + cosine-similarity ItemCF + Logistic Regression |
 | Agents | Five controlled Agents with allow-listed tools |
 | Search | PostgreSQL full-text search or trigram search over authorised platform content |
 | Cloud | Vercel for Web; AWS ECS Fargate and ALB for backend services; RDS for PostgreSQL; S3 for photos |
 | CI/CD and security | GitHub Actions, automated tests, Trivy, OWASP ZAP, secret/dependency checks |
 | Source control | GitHub Organization with separate private repositories; no monorepo |
-| Repository grouping | Four code repositories plus one restricted documentation repository |
+| Repository grouping | Five code repositories plus one restricted documentation repository |
 | Delivery window | Four one-week sprints |
 
 ### Architecture authority
 
 - **Spring Boot is the only public business API and security boundary.**
-- Android and Web never call an Agent or ML service directly.
+- Android and Web never call an Agent or inference service directly.
 - FastAPI services are private and accept only controlled internal requests.
 - Spring Boot owns authentication, authorisation, domain rules, persistence, audit records, search permissions, and analytics.
 - Agents do not access PostgreSQL directly.
-- The Agent service may call narrow, allow-listed Spring Boot internal tools and the private ML service.
+- The Agent service may call narrow, allow-listed Spring Boot internal tools and the private inference service.
 - Spring Boot validates structured Agent output before storing or returning it.
 - Source-code access is isolated by repository and team responsibility.
-- The Agent service and ML service remain logically separate even when stored together in the private `foodmind-intelligence` repository.
+- The Agent service and inference service remain logically separate inside the private `foodmind-intelligence` repository.
+- Offline training, evaluation, and release packaging belong to the separate `foodmind-ml` repository; Intelligence consumes an immutable released model package.
 
 ---
 
@@ -164,6 +170,25 @@ These workflows must remain independent:
    - Searches, organises, summarises, and compares Meal Notes, Food Products, and Places.
    - Does not generate meal recommendations and does not call the recommendation model.
    - Does not generate cooking plans.
+
+### Recommendation-first home experience
+
+Android and Web organise the confirmed capabilities through the same product
+hierarchy:
+
+1. The top-level home switch contains **Eat out & delivery** and **Cooking**.
+2. **Eat out & delivery** is the default and owns the strongest call to action:
+   **Generate Recommendation**.
+3. The recommendation request uses the user's authorised history, current
+   context, and selected trusted-group evidence.
+4. The backend can return three intentionally different ordered candidates. The
+   client initially spotlights the lead candidate and exposes the remaining
+   candidates through an explicit “try another” action.
+5. Groups is a core shared decision workspace.
+6. Explore uses an image-led feed for authorised group-visible and curated
+   platform content. It is not the public/follower feed excluded from the MVP.
+7. Cooking uses manually entered or already authorised pantry/ingredient
+   context. Automatic inventory capture remains future work.
 
 ### Business requirements
 
@@ -213,18 +238,30 @@ Users can:
 - Mark each record as `Private` or `Group`
 - Browse an authorised group feed
 - Save a shared item as `Want to Try`
+- Use the group as the recommendation context and share a selected result back
+  to the group
+- Discover authorised group-visible and curated content through the Explore
+  destination
 
-There is no public social feed in the MVP.
+There is no public or follower-based social feed in the MVP. Explore is a
+permission-safe presentation of existing authorised content, not a new
+visibility mode.
 
 #### BR-04 — Direct meal recommendation
 
-The user selects **Generate Food Recommendation**, optionally enters current context, and receives three explainable choices:
+The user selects **Generate Food Recommendation**, optionally enters current
+context and a trusted group, and receives an ordered set of up to three
+explainable choices:
 
 1. A high-confidence personal choice
 2. An exploratory choice
 3. A group-inspired choice
 
 The system removes invalid candidates before ranking and avoids recent repetition.
+
+The home initially displays the highest-ranked lead choice. “Try another”
+reveals another candidate from the same response; it does not silently create a
+new recommendation session.
 
 #### BR-05 — Feedback loop
 
@@ -243,12 +280,15 @@ Feedback is stored as separate events and can support future offline model retra
 
 Users enter:
 
-- Available ingredients
+- Available ingredients or manually maintained pantry context
 - Budget
 - Available time
 - Dietary rules
 
 The Cooking Planner Agent returns structured ingredients and ordered cooking steps based on a controlled recipe catalogue.
+
+The MVP does not automatically detect, purchase, or continuously synchronise
+inventory.
 
 #### BR-07 — Independent platform chatbot
 
@@ -278,6 +318,10 @@ The live dashboard and the weekly recap are different:
 - A **dashboard** is an interactive current view.
 - A **weekly recap** is a periodic summary report.
 
+Dashboard remains a confirmed capability, but it is not the default home-screen
+focus. Home prioritises the immediate meal decision; analytics remains
+available through its own destination.
+
 #### BR-09 — Android and Web parity
 
 Android and Web expose the same business capabilities, use the same REST contracts, permission rules, validation semantics, and backend metric definitions. Their visual layouts may differ.
@@ -297,6 +341,7 @@ All user-facing functionality passes through Spring Boot. At least one complete 
 - Personal history
 - Trusted groups and `Private`/`Group` visibility
 - Group feed and `Want to Try`
+- Recommendation-aware group context and permission-safe Explore composition
 - Hard-constraint filtering
 - Simple cosine-similarity UserCF
 - Simple cosine-similarity ItemCF
@@ -318,7 +363,7 @@ All user-facing functionality passes through Spring Boot. At least one complete 
 - Food delivery ordering
 - Payments
 - Public or follower-based social feeds
-- Automatic ingredient inventory
+- Automatic ingredient inventory capture or synchronisation
 - Automatic grocery purchasing
 - Image or food recognition
 - Push notifications
@@ -339,8 +384,8 @@ Simple UserCF and ItemCF are in the MVP. Only advanced Collaborative Filtering m
 |---|---|---|
 | UC-01 | Register, sign in, and manage profile/preferences | Compose/React, Spring Security, JWT, JPA, PostgreSQL |
 | UC-02 | Create, edit, delete, and filter food/drink records | Compose/React forms, Spring REST, JPA, S3 optional |
-| UC-03 | Create/join groups, browse group feed, save `Want to Try` | Group APIs, membership and visibility checks |
-| UC-04 | Generate three explainable meal recommendations | Recommendation Agent, rule tools, UserCF, ItemCF, LR |
+| UC-03 | Create/join groups, use shared group context, browse authorised Group/Explore content, save `Want to Try` | Group APIs, membership and visibility checks |
+| UC-04 | Generate an ordered set of up to three explainable recommendations and spotlight the lead result | Recommendation Agent, rule tools, UserCF, ItemCF, LR |
 | UC-05 | Accept, reject, re-recommend, and submit post-meal feedback | Feedback API, event records, offline retraining data |
 | UC-06 | Generate a cooking plan | Cooking Planner Agent, recipe catalogue, Pydantic |
 | UC-07 | Search authorised platform content through Chatbot | Chatbot Orchestrator, Platform Search Agent |
@@ -506,16 +551,21 @@ When there is insufficient UserCF or ItemCF data:
 - Keep the CF availability flag as `false`.
 - Do not treat a missing score as dislike.
 - Rely on explicit preferences, current context, seed data, group ratings, and deterministic rules.
-- If the ML service fails or times out, use a deterministic fallback ranking.
+- If the runtime inference service fails or times out, use a deterministic fallback ranking.
 - Return `modelStatus` or `fallbackStatus` in the structured response.
 
 ### Step 8 — Diversity and explanation
 
-Return three intentionally different options:
+Return up to three intentionally different options in stable order:
 
 1. **Personal:** highest-confidence match
 2. **Exploratory:** valid but less repetitive or slightly novel
 3. **Group-inspired:** supported by trusted-group evidence
+
+The first item is the lead recommendation shown on the home screen. The
+remaining items support the explicit “try another” interaction within the same
+session. The client does not discard their identifiers, types, evidence, or
+feedback semantics merely because only one card is visible at a time.
 
 The model score is not itself the explanation. Store structured reason codes such as:
 
@@ -558,7 +608,7 @@ For event data, a time-aware split is preferable to prevent future interactions 
 
 | Agent | Trigger | Main tools | Structured output | Must not do |
 |---|---|---|---|---|
-| Recommendation Agent | Generate Food Recommendation | Authorised context, candidate retrieval, hard filter, ML ranking, diversity, reason-code tools | Three grounded recommendation cards | Direct DB access, public web search, cooking, unsupported explanations |
+| Recommendation Agent | Generate Food Recommendation | Authorised context, candidate retrieval, hard filter, ML ranking, diversity, reason-code tools | Up to three ordered grounded candidates with a lead result | Direct DB access, public web search, cooking, unsupported explanations |
 | Cooking Planner Agent | Generate Cooking Plan | Recipe catalogue, ingredient matcher, budget/time/diet validator | Ingredients, ordered steps, warnings, source recipe ID | Recommendation ranking, Chatbot search, unsafe invented facts |
 | Chatbot Orchestrator | Chatbot message | Intent classification, conversation state, route selection | Route decision and final grounded response | Calling recommendation or cooking workflows |
 | Platform Search Agent | Search intent | Authorised Spring Boot search tool | Ranked Meal Note, Food Product, and Place references | Searching inaccessible data or public internet |
@@ -587,7 +637,7 @@ flowchart TD
     C --> D["PostgreSQL / RDS"]
     C --> E["S3 Photo Storage"]
     C --> F["Private Multi-Agent Service"]
-    F --> G["Private Hybrid ML Service"]
+    F --> G["Private Runtime Inference Service"]
     F --> C
 ```
 
@@ -597,6 +647,9 @@ flowchart TD
 
 - Native Kotlin/Jetpack Compose UI
 - Same use cases and validation semantics as Web
+- Recommendation-first home with an **Eat out & delivery / Cooking** switch
+- Persistent Home, Groups, Explore, Saved, and Me navigation
+- One lead recommendation visible at a time from the ordered candidate set
 - Calls versioned Spring Boot REST endpoints
 - Uses Vico for charts
 - Does not contain authoritative business rules
@@ -605,6 +658,8 @@ flowchart TD
 
 - React/TypeScript responsive UI
 - Same business scope as Android
+- Recommendation-first responsive shell with the same two modes and labeled destinations
+- Permission-safe image-led Explore presentation for group-visible and curated content
 - Uses TanStack Query for server state
 - Uses Recharts for charts
 - Does not bypass Spring Boot
@@ -619,9 +674,10 @@ Owns:
 - Domain validation
 - CRUD and history
 - Group feed
+- Shared group recommendation context and permission-scoped Explore composition
 - Candidate retrieval
 - Search authorisation
-- Agent/ML orchestration
+- Agent/inference orchestration
 - Persistence
 - Analytics aggregation
 - Audit and trace correlation
@@ -640,7 +696,7 @@ Owns:
 
 It receives only authorised context or uses narrow internal tools.
 
-#### Private Hybrid ML Service
+#### Private Runtime Inference Service
 
 Owns:
 
@@ -648,8 +704,19 @@ Owns:
 - ItemCF feature generation
 - Logistic Regression inference
 - Model loading/versioning
-- Offline training/evaluation scripts
 - Model status and fallback-compatible response schemas
+
+#### Offline ML Training Repository
+
+Owns:
+
+- Dataset definitions and validation
+- Feature engineering and collaborative-filtering experiments
+- Logistic Regression training
+- Offline evaluation and leakage checks
+- Model cards, release manifests, and immutable model-package publication
+
+The runtime inference service validates and loads a released package; it does not train models.
 
 #### PostgreSQL
 
@@ -673,7 +740,7 @@ Stores optional image objects only. PostgreSQL stores object keys, ownership, co
 - React Web: Vercel with HTTPS
 - Spring Boot: Docker container on AWS ECS Fargate behind ALB
 - Multi-Agent service: private ECS service
-- ML service: private ECS service
+- Runtime inference service: private ECS service
 - PostgreSQL: Amazon RDS in a private network
 - Images: S3
 - Secrets: AWS Secrets Manager or equivalent secure CI/CD secrets
@@ -681,7 +748,7 @@ Stores optional image objects only. PostgreSQL stores object keys, ownership, co
 
 ### Important architecture consistency rule
 
-Older artifacts sometimes describe one combined FastAPI Agent-and-ML service. The latest architecture treats Agent and ML as two private logical services. If the team later combines them into one deployable container to reduce MVP operational cost, the Agent and ML modules and contracts should remain logically separate, and every Proposal, diagram, script, and README must be updated consistently.
+Older artifacts sometimes describe one combined FastAPI Agent-and-ML service. The latest runtime architecture keeps Agent and inference as two private logical services inside `foodmind-intelligence`, while offline training and model release live in `foodmind-ml`. If the team later combines the two runtime services into one deployable container to reduce MVP operational cost, their modules and contracts must remain logically separate. Every Proposal, diagram, script, and README must use the same separation.
 
 ---
 
@@ -699,23 +766,24 @@ The main reason is access and cognitive isolation rather than Git transfer size:
 - Each repository can have its own Issues, Pull Requests, CI workflow, secrets, and deployment process.
 - GitHub permissions apply at repository level; they cannot safely hide selected folders inside one repository from a member who can clone that repository.
 
-The exact GitHub Organization name has not yet been confirmed. `foodmind-team` is a recommended placeholder only.
+The repositories currently use the GitHub Organization name `foodmind-team`. Organization roles, team membership, and branch-protection settings still require explicit verification.
 
-### Recommended five-repository layout
+### Confirmed six-repository layout
 
 | Repository | Responsibility | Main contents | Typical access |
 |---|---|---|---|
 | `foodmind-backend` | Public business API and system of record | Spring Boot, JWT, business modules, JPA, Flyway, PostgreSQL integration, public OpenAPI contract | Backend members; project owner/admin |
 | `foodmind-web` | Browser client | React, TypeScript, Vite, Tailwind CSS, TanStack Query, Recharts | Web members; project owner/admin |
 | `foodmind-android` | Native mobile client | Kotlin, Jetpack Compose, Navigation, ViewModel, StateFlow, Retrofit, Vico | Android members; project owner/admin |
-| `foodmind-intelligence` | Private AI and ML logic | `agent-service` and `ml-service` as logically separate modules, shared private schemas, model artifacts, evaluation scripts | Agent/ML members; backend integrator; project owner/admin |
+| `foodmind-intelligence` | Private runtime AI and inference | `agent-service`, `inference-service`, internal schemas, model-package consumer, runtime deployment | Agent/runtime members; backend integrator; project owner/admin |
+| `foodmind-ml` | Offline ML training and release | Data validation, feature engineering, UserCF/ItemCF, LR training, evaluation, model cards, immutable model packaging | ML members; Intelligence integrator; project owner/admin |
 | `foodmind-docs` | Restricted system-level source of truth | Architecture, ERD, ADRs, system contracts, project plans, UAT evidence, integration runbooks | Project owner and selected core members |
 
-This is a **four-code-repository plus one restricted-documentation-repository** model.
+This is a **five-code-repository plus one restricted-documentation-repository** model.
 
 ### Required internal structure of `foodmind-intelligence`
 
-The repository may contain both private Python services to reduce repository and permission overhead, but they must remain separate:
+The repository contains both private runtime Python services, but they must remain separate:
 
 ```text
 foodmind-intelligence/
@@ -729,25 +797,45 @@ foodmind-intelligence/
 │   ├── tests/
 │   ├── Dockerfile
 │   └── pyproject.toml
-├── ml-service/
+├── inference-service/
 │   ├── app/
-│   │   ├── collaborative/
 │   │   ├── features/
 │   │   ├── inference/
+│   │   ├── model_registry/
 │   │   ├── schemas/
 │   │   └── main.py
-│   ├── training/
-│   ├── evaluation/
-│   ├── models/
 │   ├── tests/
 │   ├── Dockerfile
 │   └── pyproject.toml
 ├── contracts/
-│   └── internal/
+│   ├── internal/
+│   └── model-package/
 └── README.md
 ```
 
-The two modules may later be deployed as two ECS services or, if the four-week MVP requires it, as one container with two logical application boundaries. Combining the deployment unit does not permit the Agent code to become the model implementation or to access PostgreSQL directly.
+The two runtime modules may later be deployed as two ECS services or, if the four-week MVP requires it, as one container with two logical application boundaries. Combining the deployment unit does not permit the Agent code to become the model implementation or to access PostgreSQL directly.
+
+### Required internal structure of `foodmind-ml`
+
+```text
+foodmind-ml/
+├── data/
+├── configs/
+├── notebooks/
+├── src/foodmind_ml/
+│   ├── data/
+│   ├── features/
+│   ├── collaborative/
+│   ├── training/
+│   ├── evaluation/
+│   └── packaging/
+├── tests/
+├── reports/
+├── contracts/model-package/
+└── docs/model-cards/
+```
+
+`foodmind-ml` publishes a versioned model package with a manifest, schemas, metrics, model-card reference, and checksums. `foodmind-intelligence` validates and loads that package for runtime inference.
 
 ### Access-control model
 
@@ -755,14 +843,15 @@ Recommended GitHub Organization roles:
 
 - The user/project lead: Organization Owner and repository Admin for all repositories.
 - One backup core member: carefully selected backup administrator if required.
-- Backend team: write access to `foodmind-backend`; read or integration access to `foodmind-intelligence` only when necessary.
+- Backend team: write access to `foodmind-backend`; contract-level integration access to `foodmind-intelligence` only when necessary.
 - Web team: write access to `foodmind-web`; no backend source access is required to consume the public API.
 - Android team: write access to `foodmind-android`; no backend source access is required to consume the public API.
-- Agent/ML team: write access to `foodmind-intelligence`.
+- Agent/runtime team: write access to `foodmind-intelligence`.
+- ML training team: write access to `foodmind-ml`; access to runtime model-package fixtures when necessary.
 - Core documentation members: access to `foodmind-docs`.
 - Ordinary contributors: no Organization Owner role and no automatic access to unrelated private repositories.
 
-Create GitHub Teams such as `backend`, `web`, `android`, `intelligence`, and `core-docs`, then grant each team access only to its repository. The exact member assignment remains an unresolved project-management decision.
+Create GitHub Teams such as `backend`, `web`, `android`, `intelligence`, `ml`, and `core-docs`, then grant each team access only to its repository. The exact member assignment remains an unresolved project-management decision.
 
 ### What every contributor is allowed to know
 
@@ -809,12 +898,21 @@ When the public contract changes:
 
 #### Private contracts
 
-`foodmind-intelligence` owns schemas for:
+`foodmind-intelligence` owns runtime schemas for:
 
 - Spring Boot to Agent requests and responses
-- Agent to ML inference requests and responses
+- Agent to inference-service requests and responses
 - Structured recommendation results
 - Model status, fallback status, reason codes, source references, and trace IDs
+
+`foodmind-ml` owns the producer side of the versioned model-package contract:
+
+- Model manifest and checksums
+- Feature-schema version
+- Inference-contract compatibility
+- Evaluation summary and model-card reference
+
+`foodmind-intelligence` owns the matching consumer validation and fixtures.
 
 Spring Boot must keep a matching client DTO and contract test. Private service endpoints are never documented as client-facing features.
 
@@ -825,8 +923,10 @@ flowchart TD
     A["Web repository"] --> C["Backend contract"]
     B["Android repository"] --> C
     C --> D["Spring Boot service"]
-    D --> E["Agent module"]
-    E --> F["ML module"]
+    D --> E["Agent service"]
+    E --> F["Runtime inference service"]
+    G["Offline ML training repository"] --> H["Immutable model package"]
+    H --> F
 ```
 
 The diagram shows contract dependencies, not shared source-code dependencies.
@@ -887,7 +987,8 @@ Each code repository builds and tests only its own component:
 - `foodmind-backend`: Java build, unit/integration tests, container scan, backend deployment.
 - `foodmind-web`: lint, type check, unit tests, production build, Vercel deployment.
 - `foodmind-android`: Gradle build, unit tests, debug APK artifact.
-- `foodmind-intelligence`: Python lint/type checks, Agent tests, ML tests, evaluation reproducibility, two container builds when deployed separately.
+- `foodmind-intelligence`: Python lint/type checks, Agent tests, inference/model-load tests, contract tests, and runtime container builds.
+- `foodmind-ml`: Data/feature tests, UserCF/ItemCF toy-matrix tests, training reproducibility, evaluation reports, and model-package validation.
 
 Cross-system UAT is coordinated from the restricted documentation/integration process, not by giving every contributor access to every repository.
 
@@ -899,7 +1000,7 @@ Use stable environment names:
 - `staging`
 - `production-demo`
 
-Android and Web should be configurable by base URL and must never hardcode secrets. The clients need only the Spring Boot URL. Spring Boot owns the private Agent and ML service URLs.
+Android and Web should be configurable by base URL and must never hardcode secrets. The clients need only the Spring Boot URL. Spring Boot owns the private Agent and inference-service URLs.
 
 For local end-to-end integration, the core integrator may clone the authorised repositories as sibling folders and use a restricted orchestration file or runbook. Do not commit real secrets or distribute full-system credentials to the entire team.
 
@@ -968,6 +1069,7 @@ Exact DTOs and OpenAPI contracts must be finalised in Sprint 1. The following en
 - `/groups`
 - `/groups/{groupId}/members`
 - `/groups/{groupId}/feed`
+- permission-aware group/search endpoints used to compose Explore
 - `/want-to-try`
 - `/recommendations/generate`
 - `/recommendations/{sessionId}`
@@ -998,12 +1100,13 @@ Private endpoints require service authentication and are never exposed to Androi
 3. Spring Boot retrieves only authorised candidates and evidence.
 4. Hard rules remove invalid candidates.
 5. Feature vectors are created.
-6. The private ML service returns scores and model metadata.
+6. The private runtime inference service returns scores and model metadata.
 7. The Recommendation Agent applies diversity and converts reason codes into grounded text.
 8. Spring Boot validates the result.
 9. Spring Boot stores the session, candidates, scores, reasons, and model/fallback version.
-10. Client receives three recommendation cards.
-11. Feedback is submitted through a separate endpoint and stored as an event.
+10. Client receives up to three ordered candidates and spotlights the lead result.
+11. “Try another” may reveal another returned candidate without creating a new session.
+12. Feedback is submitted through a separate endpoint and stored as an event.
 
 ### Contract requirements
 
@@ -1056,11 +1159,11 @@ Do not compute the same metric independently in Android and React. Shared backen
 |---:|---|---|---:|---|
 | 1 | PBI-01 | Identity, preferences, and hard constraints | 8 | S1 |
 | 2 | PBI-02 | Food and drink records | 8 | S2 |
-| 3 | PBI-03 | Three explainable recommendations | 8 | S3 |
+| 3 | PBI-03 | Recommendation-first home and up to three ordered explainable candidates | 8 | S3 |
 | 4 | PBI-04 | Hard-constraint filtering | 8 | S2 |
 | 5 | PBI-05 | UserCF, ItemCF, and LR ranking | 13 | S3 |
 | 6 | PBI-06 | Feedback and re-recommendation | 5 | S4 |
-| 7 | PBI-07 | Trusted groups and privacy | 8 | S2 |
+| 7 | PBI-07 | Trusted groups, shared decisions, permission-safe Explore, and privacy | 8 | S2 |
 | 8 | PBI-08 | Independent platform Chatbot | 8 | S3 |
 | 9 | PBI-09 | Cooking plan | 5 | S3 |
 | 10 | PBI-10 | Dashboard and weekly recap | 8 | S4 |
@@ -1079,9 +1182,10 @@ Total planned size: **123 team-relative story points**.
 
 - Confirm use cases and acceptance criteria
 - UI storyboard
+- Shared two-mode home shell and labeled navigation contract
 - ERD and logical data model
 - API contracts
-- Create the GitHub Organization, five private repositories, GitHub Teams, access rules, branch protection, baseline READMEs, and CI foundations
+- Verify the GitHub Organization, six private repositories, GitHub Teams, access rules, branch protection, baseline READMEs, and CI foundations
 - JWT and preferences
 - Authorisation rules
 - Shared seed catalogue
@@ -1091,7 +1195,7 @@ Total planned size: **123 team-relative story points**.
 
 - Food and drink CRUD
 - History
-- Groups, visibility, group feed, and `Want to Try`
+- Groups, visibility, shared recommendation context, group feed, permission-safe Explore, and `Want to Try`
 - Authorised platform search
 - Hard-rule recommendation baseline
 - Working Android-to-Spring and Web-to-Spring vertical slices
@@ -1156,15 +1260,21 @@ A feature is done only when:
 - Timeout and invalid-output tests
 - Grounding/source-reference tests
 
-### ML service
+### Runtime inference service
 
 - Feature transformation tests
 - UserCF and ItemCF toy-matrix tests
 - Cold-start tests
 - Model load/version tests
 - Deterministic fallback tests
+
+### Offline ML training repository
+
+- Dataset validation and provenance tests
+- Training reproducibility tests
 - Evaluation report reproducibility
 - Data-leakage checks
+- Model-package manifest and checksum tests
 
 ### Android and Web
 
@@ -1218,14 +1328,14 @@ When advising priorities, prefer one complete, secure, tested vertical slice ove
 
 ---
 
-## 16. Current Status as of 27 July 2026
+## 16. Current Status as of 28 July 2026
 
 ### Completed or substantially prepared
 
 - Project concept and problem origin
 - Final Proposal
 - Revised 10-minute presentation script
-- Proposal-aligned 13-slide presentation
+- Proposal-aligned presentation deck; final slide-count reconciliation is still required
 - High-level use case diagram
 - High-level architecture diagram
 - Prioritised Product Backlog
@@ -1233,17 +1343,24 @@ When advising priorities, prefer one complete, secure, tested vertical slice ove
 - Initial Project Status workbook
 - Four-week scope and future-work boundary
 - Decision to use separate private repositories rather than a monorepo
-- Recommended four-code-repository plus one restricted-documentation-repository structure
+- Confirmed five-code-repository plus one restricted-documentation-repository structure
+- Six GitHub repositories and baseline directory frameworks
+- Repository-specific README and architecture/operations documentation on documentation branches
 - Initial repository access and collaboration model
+- Responsive Web recommendation-first UX prototype with the two-mode shell,
+  Groups, Explore, Saved, and profile views
+- Native Android recommendation-first UX prototype with mode switching,
+  recommendation generation, group context, Explore preview, and labeled bottom
+  navigation
 
 ### Not confirmed as implemented
 
-- GitHub Organization, repositories, Teams, permissions, and branch protection
-- Repository scaffolds, READMEs, and per-repository CI workflows
+- GitHub Teams, final permissions, and branch protection
+- Implemented per-repository CI workflows
 - Final ERD and database migrations
 - Final OpenAPI contracts
-- Complete Android application
-- Complete React application
+- Production-complete Android application and backend integration
+- Production-complete React application and backend integration
 - Spring Boot implementation for the AD Project
 - Five-Agent implementation
 - UserCF/ItemCF/LR training and inference pipeline
@@ -1264,15 +1381,22 @@ An AI assistant must inspect the repository before stating that any unconfirmed 
 
 **Current canonical decision:** Simple cosine-similarity UserCF and ItemCF are part of the MVP and feed features into Logistic Regression. Matrix factorisation and deep recommenders remain future work.
 
-**Action:** Update every Proposal, diagram, script, model description, and backlog consistently.
+**Action:** Keep subordinate implementation documents and contracts consistent
+with the formal hybrid model. Do not edit the frozen Proposal or presentation
+during routine alignment; record any future formal revision as a separately
+approved submission task.
 
 ### B. Python service decomposition
 
 **Older wording:** One private FastAPI service runs both Agents and ML.
 
-**Latest architecture:** A private Multi-Agent FastAPI service and a separate private ML FastAPI service.
+**Latest architecture:** A private Multi-Agent FastAPI service and a separate runtime inference FastAPI service live in `foodmind-intelligence`. Offline training, evaluation, and model packaging live in `foodmind-ml`.
 
-**Action:** Use the latest logical split unless the team explicitly decides to merge deployment units. If changed, update every artifact consistently.
+**Action:** Preserve the logical runtime split even if both runtime modules
+share the single private FastAPI deployment shown in the formal material.
+Preserve the repository boundary between offline training and runtime
+consumption. Do not alter the frozen Proposal or presentation during routine
+documentation alignment.
 
 ### C. `MealNote` versus `FoodRecord`
 
@@ -1316,19 +1440,38 @@ Do not make the Chatbot the universal entry point for all AI features.
 
 **Obsolete recommendation:** One private monorepo containing Android, Web, Spring Boot, Agent, ML, and documentation.
 
-**Current confirmed direction:** Separate private repositories with repository-level access isolation. The recommended grouping is:
+**Current confirmed direction:** Separate private repositories with repository-level access isolation. The confirmed grouping is:
 
 - `foodmind-backend`
 - `foodmind-web`
 - `foodmind-android`
 - `foodmind-intelligence`
+- `foodmind-ml`
 - `foodmind-docs`
 
-The Agent and ML services remain logically separate modules inside `foodmind-intelligence`. Do not recreate a monorepo structure in new implementation advice unless the user explicitly reverses this decision.
+The Agent and runtime inference services remain logically separate modules inside `foodmind-intelligence`. Offline ML training and release packaging live in `foodmind-ml`; Intelligence consumes their immutable result. Do not recreate a monorepo structure in new implementation advice unless the user explicitly reverses this decision.
 
 ### I. GitHub names versus confirmed resources
 
-Repository and Organization names in this document are recommended names, not proof that the resources already exist. Inspect GitHub or the current workspace before claiming that any repository, team, branch rule, CI workflow, Issue, or secret has been created.
+The current local repositories confirm the `foodmind-team` Organization and the six repository names. This does not prove that GitHub Teams, branch rules, CI workflows, Issues, environments, or secrets have been configured. Inspect GitHub or the current workspace before claiming those resources exist.
+
+### J. Product hierarchy versus capability scope
+
+The formal sources describe the complete capability set; the latest UX
+clarification defines how those capabilities are prioritised:
+
+- **Eat out & delivery** is the default home mode.
+- **Cooking** is the second home mode and remains a separate Agent path.
+- The recommendation CTA is the most prominent action.
+- One lead candidate is shown at a time, while the contract preserves up to
+  three ordered candidate types.
+- Groups is a core shared-decision destination.
+- Explore is an authorised group/curated content presentation, not the public
+  social feed excluded from the MVP.
+- Dashboard remains in scope but is no longer the default home emphasis.
+
+Do not reinterpret these presentation decisions as new public-search,
+automatic-inventory, ordering, payment, or follower-feed requirements.
 
 ---
 
@@ -1352,6 +1495,8 @@ The clearest order is:
 
 ### Presentation guardrails
 
+- Treat `FoodMind_Presentation_Proposal.pptx` as a frozen formal baseline unless
+  the project owner explicitly opens a separate deck-revision task.
 - Keep slides concise; the spoken script carries the detail.
 - Use approximately 115–120 words per minute.
 - Explain only one end-to-end architecture path in detail.
@@ -1462,13 +1607,14 @@ Default answer: protect the MVP.
 
 Unless newer implementation work exists, the next AI should help the team do the following in order:
 
-1. Create the GitHub Organization and the five private repositories.
-2. Create GitHub Teams, assign least-privilege repository access, protect each `main` branch, and add baseline READMEs and `.env.example` files.
+1. Verify the GitHub Organization settings and the six private repositories.
+2. Review and merge the baseline READMEs, then create GitHub Teams, assign least-privilege repository access, protect each `main` branch, and add `.env.example` files.
 3. Confirm team member ownership for Android, Web, Spring Boot, Agents, ML, DevOps, testing, integration, and documentation.
-4. Synchronise the Proposal, PPT, diagrams, script, and this guide on UserCF/ItemCF, the two private FastAPI services, and the separate-repository model.
+4. Keep implementation READMEs, contracts, diagrams, and this guide aligned to
+   the frozen Proposal/PPT scope and the approved recommendation-first UX.
 5. Finalise UC-01 to UC-09 acceptance criteria.
 6. Finalise the ERD, especially `Meal`, `FoodRecord`, `Place`, and Chatbot content references.
-7. Finalise the canonical public OpenAPI contract and the private Agent/ML schemas before independent repository implementation diverges.
+7. Finalise the canonical public OpenAPI contract, private Agent/inference schemas, and model-package contract before independent repository implementation diverges.
 8. Create the seed catalogue and ML interaction-data schemas.
 9. Scaffold per-repository CI and establish a staging Spring Boot URL or agreed mock contract for Android and Web.
 10. Build one baseline vertical slice:
@@ -1476,8 +1622,8 @@ Unless newer implementation work exists, the next AI should help the team do the
     - save preferences
     - retrieve controlled candidates
     - apply hard rules
-    - return three fallback recommendations
-    - display the same result on Android and Web
+    - return up to three ordered fallback recommendations
+    - display the same lead result on Android and Web and expose the remaining candidates through “try another”
 11. Add UserCF, ItemCF, and Logistic Regression behind the established private contract.
 12. Add the remaining Agents without changing the public client contract.
 13. Add dashboards, cloud deployment, security evidence, cross-repository UAT, and final demonstration materials.
@@ -1493,7 +1639,11 @@ FoodMind should always be understood as one integrated decision-support product:
 - **UserCF and ItemCF** discover behavioural similarity.
 - **Logistic Regression** estimates acceptance probability.
 - **The Recommendation Agent** converts verified evidence into diverse, explainable choices.
+- **The recommendation-first home** spotlights one lead choice while preserving
+  the ordered Personal, Exploratory, and Group-inspired candidate set.
 - **The Cooking Planner** supports a separate cooking workflow.
+- **Groups and Explore** make authorised shared knowledge visible without
+  introducing a public social feed.
 - **The Chatbot Agents** make authorised platform knowledge searchable and reusable.
 - **Feedback** creates future learning signals.
 - **Dashboards and recaps** turn records into personal insight.
