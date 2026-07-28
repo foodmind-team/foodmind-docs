@@ -44,6 +44,8 @@ FoodMind uses six separate private repositories:
 
 - `FoodMind_Presentation_Proposal.pptx`: presentation deck. Slide content and diagrams must be checked against the canonical guide before final use.
 
+- `planning/team-work-allocation.md`: proposed seven-person workload and repository ownership plan for the four-week MVP.
+
 ## Repository Structure
 
 ```text
