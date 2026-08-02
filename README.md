@@ -56,6 +56,11 @@ FoodMind uses six separate private repositories:
 - `planning/team-work-allocation.md`: seven-person workload and repository
   ownership plan aligned to the recommendation-first UX.
 
+- `planning/cooking-plan-agent-fullstack-plan/README.md`: proposed phased
+  delivery plan for the Cooking Plan v2 path across Web, Backend, and the
+  Intelligence Agent, including contract freeze, async orchestration,
+  production hardening, rollout, and v1 retirement.
+
 - `planning/status/FoodMind_Prioritisation_Strategy_and_Project_Status_Report.xlsx`:
   formula-driven feature prioritisation, business-process, technology and
   evidence-based delivery status report derived from the formal baselines and
