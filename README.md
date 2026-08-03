@@ -61,6 +61,20 @@ FoodMind uses six separate private repositories:
   Intelligence Agent, including contract freeze, async orchestration,
   production hardening, rollout, and v1 retirement.
 
+- `architecture/recommendation-document-inventory.md`: audited inventory of
+  the formal, canonical, Backend, Intelligence, ML, and client documentation
+  related to recommendation algorithms and Agents, including discrepancies
+  against the current repository implementations.
+
+- `architecture/recommendation-system-implementation-design.md`: proposed
+  end-to-end design for the Backend recommendation function, UserCF, ItemCF,
+  logistic-regression ranking, model package, private inference service,
+  dedicated Recommendation Agent, feedback loop, security, and rollout.
+
+- `planning/recommendation-system-delivery-plan.md`: phased cross-repository
+  implementation plan, acceptance gates, responsibility matrix, test strategy,
+  and Git/PR sequence for delivering the recommendation system.
+
 - `planning/status/FoodMind_Prioritisation_Strategy_and_Project_Status_Report.xlsx`:
   formula-driven feature prioritisation, business-process, technology and
   evidence-based delivery status report derived from the formal baselines and
