@@ -554,6 +554,30 @@ When there is insufficient UserCF or ItemCF data:
 - If the runtime inference service fails or times out, use a deterministic fallback ranking.
 - Return `modelStatus` or `fallbackStatus` in the structured response.
 
+### Current ML dataset sources
+
+The offline ML work currently uses three disclosed dataset sources:
+
+1. **Food.com Recipes and Interactions (Kaggle)** for recipe metadata, dish
+   descriptions, ingredients, tags, nutrition fields, and historical user-recipe
+   ratings.
+2. **NEA Licensed Eating Establishments (data.gov.sg)** for Singapore licensed
+   eating-establishment reference data, including establishment identity,
+   premises address, hygiene grade, demerit points, and suspension fields.
+3. **Self-collected menu dataset** for selected Singapore restaurant menu items,
+   menu item names, prices, categories, source URLs, and collection dates.
+
+Food.com recipes and Singapore restaurant menus must not be joined through raw
+string equality alone. The ML dataset should normalise Food.com recipes into a
+stable `dish_id`, map Food.com interactions through that `dish_id`, and map
+self-collected menu items to the same `dish_id` through rule cleaning, alias
+dictionaries, confidence scores, and manual review for low-confidence matches.
+
+The NEA dataset supports establishment provenance and hygiene-related context,
+but it does not provide menu item prices, user ratings, restaurant popularity,
+or dish-level availability. Budget and restaurant-menu filtering therefore
+depend on the self-collected menu dataset, not on NEA alone.
+
 ### Step 8 — Diversity and explanation
 
 Return up to three intentionally different options in stable order:
@@ -594,6 +618,7 @@ Report:
 Also report:
 
 - Dataset origin and size
+- Dataset source mix: Food.com/Kaggle, NEA/data.gov.sg, and self-collected menu data where applicable
 - Class balance
 - Train/test method
 - Baseline comparison
@@ -711,6 +736,9 @@ Owns:
 Owns:
 
 - Dataset definitions and validation
+- Dataset-source records for Food.com Recipes and Interactions (Kaggle), NEA
+  Licensed Eating Establishments (data.gov.sg), and the self-collected menu
+  dataset
 - Feature engineering and collaborative-filtering experiments
 - Logistic Regression training
 - Offline evaluation and leakage checks
