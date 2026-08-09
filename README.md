@@ -40,6 +40,21 @@ FoodMind uses six separate private repositories:
 
 `foodmind-ml` produces a versioned model package. `foodmind-intelligence` validates and consumes that package; it does not own offline training.
 
+## Current ML Data Sources
+
+The current offline ML dataset plan uses:
+
+- **Food.com Recipes and Interactions (Kaggle)** for recipe metadata and
+  historical user-recipe ratings.
+- **NEA Licensed Eating Establishments (data.gov.sg)** for Singapore licensed
+  eating-establishment reference data.
+- **Self-collected menu data** for selected restaurant menu items, prices,
+  categories, source URLs, and collection dates.
+
+Food.com recipes, FoodMind interactions, and Singapore menu items are connected
+through the normalised `dish_id`. NEA data supports establishment context, but
+menu prices and dish availability must come from the self-collected menu data.
+
 ## Current Top-Level Documents
 
 - `FoodMind_AI_Project_Context_and_Tutoring_Guide.md`: canonical implementation
