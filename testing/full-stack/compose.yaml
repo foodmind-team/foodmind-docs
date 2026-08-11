@@ -1,0 +1,155 @@
+name: foodmind-e2e
+
+services:
+  postgres:
+    image: postgres:18.4
+    environment:
+      POSTGRES_DB: foodmind_e2e
+      POSTGRES_USER: foodmind
+      POSTGRES_PASSWORD: foodmind_e2e_password
+      TZ: UTC
+      PGTZ: UTC
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foodmind -d foodmind_e2e"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+
+  model-package:
+    image: python:3.13-slim
+    working_dir: /ml
+    command:
+      - sh
+      - -ec
+      - pip install --no-cache-dir numpy==2.3.2 && python scripts/build_runtime_package.py --output /model-package
+    volumes:
+      - ../../../foodmind-ml:/ml:ro
+      - model-package:/model-package
+    networks: [private]
+
+  inference:
+    build: ../../../foodmind-intelligence/inference-service
+    environment:
+      INFERENCE_APP_ENV: local
+      INFERENCE_INTERNAL_SERVICE_TOKEN: local-inference-only
+      INFERENCE_MODEL_PACKAGE_DIR: /model-package
+    volumes:
+      - model-package:/model-package:ro
+    depends_on:
+      model-package:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health/ready', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+
+  recommendation:
+    build: ../../../foodmind-intelligence/agent-service/app/agents/recommendation
+    environment:
+      RECOMMENDATION_AGENT_APP_ENV: local
+      RECOMMENDATION_AGENT_INTERNAL_SERVICE_TOKEN: local-recommendation-token
+      RECOMMENDATION_AGENT_SUPPORTED_CONTRACT_VERSIONS: recommendation-agent-v2
+      RECOMMENDATION_AGENT_INFERENCE_BASE_URL: http://inference:8002
+      RECOMMENDATION_AGENT_INFERENCE_SERVICE_TOKEN: local-inference-only
+      RECOMMENDATION_AGENT_LLM_ENABLED: "false"
+    depends_on:
+      inference:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+
+  cooking:
+    build: ../../../foodmind-intelligence/agent-service/app/agents/cooking
+    environment:
+      COOKING_PLAN_ENVIRONMENT: local
+      COOKING_PLAN_INTERNAL_SERVICE_TOKEN: local-cooking-token
+      COOKING_PLAN_SAFETY_POLICY_REGION: SG
+      COOKING_PLAN_LLM_ENABLED: "false"
+      COOKING_PLAN_TASK_API_ENABLED: "true"
+      COOKING_PLAN_CHECKPOINT_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+
+  chat:
+    build: ../../../foodmind-intelligence/agent-service/app/agents/chatbot
+    environment:
+      CHAT_AGENT_ENVIRONMENT: local
+      CHAT_AGENT_INTERNAL_SERVICE_TOKEN: local-chat-token
+      CHAT_AGENT_LLM_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health/ready', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+
+  backend:
+    build: ../../../foodmind-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: jdbc:postgresql://postgres:5432/foodmind_e2e
+      DB_USERNAME: foodmind
+      DB_PASSWORD: foodmind_e2e_password
+      JWT_SECRET: foodmind-e2e-jwt-secret-longer-than-thirty-two-bytes
+      FOODMIND_SECURITY_WEB_COOKIE_SECURE: "false"
+      FOODMIND_SECURITY_WEB_ALLOWED_ORIGINS: http://127.0.0.1:4173,http://localhost:4173
+      INTERNAL_SERVICE_TOKEN: local-backend-tools-token
+      RECOMMENDATION_AGENT_BASE_URL: http://recommendation:8000
+      RECOMMENDATION_AGENT_SERVICE_TOKEN: local-recommendation-token
+      RECOMMENDATION_AGENT_CONTRACT_VERSION: recommendation-agent-v2
+      COOKING_AGENT_BASE_URL: http://cooking:8000
+      COOKING_AGENT_SERVICE_TOKEN: local-cooking-token
+      COOKING_TASK_POLL_ENABLED: "true"
+      COOKING_TASK_POLL_INTERVAL: ${FOODMIND_E2E_COOKING_TASK_POLL_INTERVAL:-5s}
+      CHAT_AGENT_BASE_URL: http://chat:8004
+      CHAT_AGENT_SERVICE_TOKEN: local-chat-token
+      MEDIA_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      recommendation:
+        condition: service_healthy
+      cooking:
+        condition: service_healthy
+      chat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 18
+      start_period: 20s
+    networks: [private]
+
+  web:
+    build: ../../../foodmind-web
+    ports:
+      - "127.0.0.1:4173:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+
+networks:
+  private:
+
+volumes:
+  model-package:
