@@ -488,7 +488,17 @@ Representative interactive evidence:
 | Android | `dd47b09` P0 parity/build; `b224f6a` P1 API/real-stack gates; `4063530` P2 release/docs; `2312b5e`, `ca294a9` P1 stable real probes |
 | Intelligence | `810b0bc` P0 configuration; `84fe8ec` P1 persistent tasks; `fab2085` P3 warnings |
 
-All application changes are on `fix/e2e-test-blocker-20260811`. Each repository is pushed independently and represented by a draft PR targeting its default branch. The PRs are intentionally left unmerged for manual review.
+All application changes are on `fix/e2e-test-blocker-20260811`. Each repository is pushed independently and represented by a draft PR targeting its default branch:
+
+| Repository | Draft PR | Target |
+|---|---|---|
+| Backend | [foodmind-backend#26](https://github.com/foodmind-team/foodmind-backend/pull/26) | `master` |
+| Web | [foodmind-web#11](https://github.com/foodmind-team/foodmind-web/pull/11) | `master` |
+| Android | [foodmind-android#9](https://github.com/foodmind-team/foodmind-android/pull/9) | `master` |
+| Intelligence | [foodmind-intelligence#61](https://github.com/foodmind-team/foodmind-intelligence/pull/61) | `main` |
+| Documentation | [foodmind-docs#8](https://github.com/foodmind-team/foodmind-docs/pull/8) | `main` |
+
+The PRs are intentionally left unmerged for manual review.
 
 ## Appendix A — exact client operation differences
 
