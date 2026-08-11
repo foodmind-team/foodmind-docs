@@ -436,7 +436,7 @@ Release only when all of the following are true:
 | Backend | `./mvnw clean test` | **PASS — 202/202** |
 | Web | `npm run validate` | **PASS — API 83/83, lint, types, 78 unit tests, coverage, production build** |
 | Web real stack | `npm run test:e2e:real` | **PASS — 3/3, no API interception** |
-| Android CI-compatible gate | `gradlew apiCheck clean testDebugUnitTest assembleDebug lintDebug compileDebugAndroidTestKotlin` | **PASS — 65 tasks, 42 unit tests, lint clean, APK produced** |
+| Android CI-compatible gate | `gradlew apiCheck clean testDebugUnitTest assembleDebug lintDebug compileDebugAndroidTestKotlin` | **PASS — local 65-task gate and Linux GitHub Actions run 31522687915; 42 unit tests, lint clean, APK produced** |
 | Android real stack | `gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.realStack=true` | **PASS — 3/3 on Pixel 8 Pro API 36 emulator** |
 | Intelligence Cooking | `uv run pytest -q` and `uv run ruff check .` | **PASS — 1,218/1,218, zero warnings** |
 | Intelligence Recommendation | `uv run pytest -q` and `uv run ruff check .` | **PASS — 171 passed, 1 skipped** |
@@ -485,7 +485,7 @@ Representative interactive evidence:
 |---|---|
 | Backend | `266d354` P0 recommendation contract; `b108291` P0 cooking decisions; `be0e907` P1 offline chat/container build |
 | Web | `cffd339` P0 parity; `4db3082` P1 API lock/real E2E; `6eb28a2` P2 guides; `6e3c20a` P1 real-agent latency |
-| Android | `dd47b09` P0 parity/build; `b224f6a` P1 API/real-stack gates; `4063530` P2 release/docs; `2312b5e`, `ca294a9` P1 stable real probes |
+| Android | `dd47b09` P0 parity/build; `b224f6a` P1 API/real-stack gates; `4063530` P2 release/docs; `2312b5e`, `ca294a9` P1 stable real probes; `bddc15b` P1 platform-independent API lock |
 | Intelligence | `810b0bc` P0 configuration; `84fe8ec` P1 persistent tasks; `fab2085` P3 warnings |
 
 All application changes are on `fix/e2e-test-blocker-20260811`. Each repository is pushed independently and represented by a draft PR targeting its default branch:
