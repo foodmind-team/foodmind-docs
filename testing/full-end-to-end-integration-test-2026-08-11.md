@@ -558,6 +558,16 @@ The local acceptance stack used Backend profile `local`, PostgreSQL `localhost:5
 
 The live recommendation fault-injection result is intentionally classified as an explanation fallback inside `8004`, not a Backend recommendation fallback: candidates, order, scores, reason codes, and model metadata remain owned by Inference and deterministic policy logic.
 
+### 11.4 Final Git and CI delivery evidence
+
+| Repository | New commits | Draft PR | Final GitHub checks |
+|---|---|---|---|
+| Intelligence | `8976081` canonical responsibilities/ports; `75996b1` readiness-aware fixture smoke; `b1e8713` refreshed controlled source checksum | [#61](https://github.com/foodmind-team/foodmind-intelligence/pull/61) targeting `main` | Recommendation Agent CI runs [31574109057](https://github.com/foodmind-team/foodmind-intelligence/actions/runs/31574109057) and [31574111925](https://github.com/foodmind-team/foodmind-intelligence/actions/runs/31574111925): contracts, tests, quality, security, image, and merge-gate all passed. |
+| Backend | `8a27d62` delegated Chatbot exploration and canonical local topology | [#26](https://github.com/foodmind-team/foodmind-backend/pull/26) targeting `master` | Backend test runs [31573546817](https://github.com/foodmind-team/foodmind-backend/actions/runs/31573546817) and [31573551538](https://github.com/foodmind-team/foodmind-backend/actions/runs/31573551538) passed. |
+| Documentation | `f08d99b` topology, repair, and interactive verification record, followed by this final delivery-evidence update | [#8](https://github.com/foodmind-team/foodmind-docs/pull/8) targeting `main` | Parity run [31573553997](https://github.com/foodmind-team/foodmind-docs/actions/runs/31573553997) passed; the final additive report commit re-runs the same gate. |
+
+All three PRs were explicitly converted to Draft and remain open for manual review. No PR was merged. Web and Android required no source change for this topology correction; their repositories were not committed or pushed. Existing Android user edits in `.idea/misc.xml` and `app/build.gradle.kts` were preserved and excluded from delivery.
+
 ## Appendix A — exact client operation differences
 
 **Web-only relative to Android (19):**
