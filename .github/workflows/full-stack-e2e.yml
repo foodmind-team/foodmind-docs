@@ -1,0 +1,95 @@
+name: Full real-stack E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-and-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: foodmind-team/foodmind-docs
+          ref: fix/e2e-test-blocker-20260811
+          path: foodmind-docs
+      - uses: actions/checkout@v4
+        with:
+          repository: foodmind-team/foodmind-backend
+          ref: fix/e2e-test-blocker-20260811
+          path: foodmind-backend
+      - uses: actions/checkout@v4
+        with:
+          repository: foodmind-team/foodmind-web
+          ref: fix/e2e-test-blocker-20260811
+          path: foodmind-web
+      - uses: actions/checkout@v4
+        with:
+          repository: foodmind-team/foodmind-android
+          ref: fix/e2e-test-blocker-20260811
+          path: foodmind-android
+      - uses: actions/checkout@v4
+        with:
+          repository: foodmind-team/foodmind-intelligence
+          ref: fix/e2e-test-blocker-20260811
+          path: foodmind-intelligence
+      - uses: actions/checkout@v4
+        with:
+          repository: foodmind-team/foodmind-ml
+          ref: main
+          path: foodmind-ml
+
+      - name: Build and start the unmocked stack
+        working-directory: foodmind-docs/testing/full-stack
+        run: docker compose up --build --wait --wait-timeout 600
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: foodmind-web/package-lock.json
+      - name: Run no-interception Web scenario
+        working-directory: foodmind-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run test:e2e:real
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the CI APK
+        working-directory: foodmind-android
+        run: ./gradlew --no-daemon apiCheck clean testDebugUnitTest assembleDebug lintDebug compileDebugAndroidTestKotlin
+      - name: Run shared-account Android emulator parity probe
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          working-directory: foodmind-android
+          script: ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.realStack=true
+
+      - name: Assert correlation identifier reached runtime logs
+        working-directory: foodmind-docs/testing/full-stack
+        run: docker compose logs --no-color | tee full-stack.log && grep -q "web-real-e2e-20260811" full-stack.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-stack-e2e-evidence
+          if-no-files-found: ignore
+          path: |
+            foodmind-docs/testing/full-stack/full-stack.log
+            foodmind-web/playwright-report-real/
+            foodmind-web/test-results-real/
+            foodmind-android/app/build/outputs/apk/debug/
+            foodmind-android/app/build/reports/
+            foodmind-android/app/build/outputs/androidTest-results/
+      - name: Tear down test-owned resources
+        if: always()
+        working-directory: foodmind-docs/testing/full-stack
+        run: docker compose down --volumes --remove-orphans
