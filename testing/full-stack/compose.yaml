@@ -48,18 +48,21 @@ services:
 
   recommendation:
     build: ../../../foodmind-intelligence/agent-service/app/agents/recommendation
+    env_file:
+      - path: ../../../foodmind-intelligence/agent-service/app/agents/.env
+        required: false
     environment:
       RECOMMENDATION_AGENT_APP_ENV: local
       RECOMMENDATION_AGENT_INTERNAL_SERVICE_TOKEN: local-recommendation-token
       RECOMMENDATION_AGENT_SUPPORTED_CONTRACT_VERSIONS: recommendation-agent-v2
       RECOMMENDATION_AGENT_INFERENCE_BASE_URL: http://inference:8002
       RECOMMENDATION_AGENT_INFERENCE_SERVICE_TOKEN: local-inference-only
-      RECOMMENDATION_AGENT_LLM_ENABLED: "false"
+      RECOMMENDATION_AGENT_LLM_ENABLED: ${FOODMIND_E2E_LLM_ENABLED:-false}
     depends_on:
       inference:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health/ready', timeout=2)"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -67,15 +70,18 @@ services:
 
   cooking:
     build: ../../../foodmind-intelligence/agent-service/app/agents/cooking
+    env_file:
+      - path: ../../../foodmind-intelligence/agent-service/app/agents/.env
+        required: false
     environment:
       COOKING_PLAN_ENVIRONMENT: local
       COOKING_PLAN_INTERNAL_SERVICE_TOKEN: local-cooking-token
       COOKING_PLAN_SAFETY_POLICY_REGION: SG
-      COOKING_PLAN_LLM_ENABLED: "false"
+      COOKING_PLAN_LLM_ENABLED: ${FOODMIND_E2E_LLM_ENABLED:-false}
       COOKING_PLAN_TASK_API_ENABLED: "true"
       COOKING_PLAN_CHECKPOINT_ENABLED: "false"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health/ready', timeout=2)"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -83,12 +89,17 @@ services:
 
   chat:
     build: ../../../foodmind-intelligence/agent-service/app/agents/chatbot
+    env_file:
+      - path: ../../../foodmind-intelligence/agent-service/app/agents/.env
+        required: false
     environment:
       CHAT_AGENT_ENVIRONMENT: local
       CHAT_AGENT_INTERNAL_SERVICE_TOKEN: local-chat-token
-      CHAT_AGENT_LLM_ENABLED: "false"
+      CHAT_AGENT_LLM_ENABLED: ${FOODMIND_E2E_LLM_ENABLED:-false}
+      CHAT_AGENT_BACKEND_BASE_URL: http://backend:8080
+      CHAT_AGENT_BACKEND_SERVICE_TOKEN: local-backend-tools-token
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health/ready', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready', timeout=2)"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -105,14 +116,14 @@ services:
       FOODMIND_SECURITY_WEB_COOKIE_SECURE: "false"
       FOODMIND_SECURITY_WEB_ALLOWED_ORIGINS: http://127.0.0.1:4173,http://localhost:4173
       INTERNAL_SERVICE_TOKEN: local-backend-tools-token
-      RECOMMENDATION_AGENT_BASE_URL: http://recommendation:8000
+      RECOMMENDATION_AGENT_BASE_URL: http://recommendation:8004
       RECOMMENDATION_AGENT_SERVICE_TOKEN: local-recommendation-token
       RECOMMENDATION_AGENT_CONTRACT_VERSION: recommendation-agent-v2
-      COOKING_AGENT_BASE_URL: http://cooking:8000
+      COOKING_AGENT_BASE_URL: http://cooking:8003
       COOKING_AGENT_SERVICE_TOKEN: local-cooking-token
       COOKING_TASK_POLL_ENABLED: "true"
       COOKING_TASK_POLL_INTERVAL: ${FOODMIND_E2E_COOKING_TASK_POLL_INTERVAL:-5s}
-      CHAT_AGENT_BASE_URL: http://chat:8004
+      CHAT_AGENT_BASE_URL: http://chat:8001
       CHAT_AGENT_SERVICE_TOKEN: local-chat-token
       MEDIA_ENABLED: "false"
     ports:

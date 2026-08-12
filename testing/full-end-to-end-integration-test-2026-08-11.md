@@ -500,6 +500,64 @@ All application changes are on `fix/e2e-test-blocker-20260811`. Each repository 
 
 The PRs are intentionally left unmerged for manual review.
 
+## 11. 2026-08-12 intelligence topology correction and live regression
+
+This section is an additive verification of the canonical intelligence topology requested after the original parity repair. It supersedes older port examples in this report when they conflict with the following ownership table.
+
+| Listener | Owner | Allowed responsibility | Strong dependency |
+|---:|---|---|---|
+| `8001` | Chatbot | Chat, delegated authorized search/reference resolution, summary, comparison, and navigation | Backend delegated tools for grounded operations |
+| `8002` | Inference Service | ML scoring and model metadata only | Loaded ML runtime package |
+| `8003` | Cooking Agent | Existing cooking preprocess, generation, confirmation, and task workflow | None added by this correction |
+| `8004` | Recommendation Agent | Deterministic candidate selection/safety checks plus optional natural-language explanations | Inference `8002` |
+
+Backend remains the only public API, authorization, persistence, delegation-token, and final-validation boundary. Web and Android continue to call Backend `8080`; neither frontend calls an intelligence service directly.
+
+### 11.1 Additional defects found and resolved
+
+| Priority | Abnormal item | Targeted repair | Verification |
+|---:|---|---|---|
+| P0 | Backend local recommendation URL could target the wrong private service, causing `404`, `401`, or `502` and a public deterministic fallback. | Canonicalized Backend local/Compose URLs to Chat `8001`, Cooking `8003`, Recommendation `8004`; Recommendation calls Inference `8002`. | Port-ownership probe checked health and OpenAPI on all four ports; real recommendation returned `SUCCEEDED`, `hybrid-ranking-v1`, and `fallback=NOT_REQUIRED`. |
+| P0 | Recommendation could use an LLM ranker instead of the ML service or retry the LLM provider. | Removed the LLM ranking path. Every request calls Inference score exactly once. DeepSeek receives only selected IDs and permitted reason facts, once, after deterministic ranking. | Successful and invalid-Key live probes each produced one Inference call; the invalid-Key case produced one DeepSeek `401` and still returned the same ML-ranked candidates with deterministic explanations. |
+| P0 | Chat route intent was not passed end to end and Chatbot had no safe Backend exploration tools. | Added optional `requestedRoute` and absolute `expiresAt`; normalized client routes; rejected client `OUT_OF_SCOPE`; added double-token search/reference clients with a five-second total timeout and no retry. | Real Search, Summary, and Navigation conversations completed with Backend `failureCode=NONE`; attached references remained user-scoped. |
+| P0 | Re-attaching an already introduced Chat reference violated a uniqueness constraint and aborted the transaction. | Locked the active session and upgraded the existing reference to `USER_SHARED` instead of inserting a duplicate row. | The same reference can be attached repeatedly and keeps the same ID; focused Chat flow tests pass. |
+| P0 | Local Web on Vite preview port `4173` was rejected by Backend CORS. | Added `localhost` and `127.0.0.1` port `4173` to the local/test allow-list. | Real browser login and all subsequent API calls succeeded. |
+| P0 | Cooking async tasks completed inside `8003`, but Backend local/Compose polling defaulted off, leaving clients indefinitely at `PROCESSING`. | Enabled `foodmind.cooking.task.poll-enabled` by default in the `local` and `docker` profiles while keeping tests explicitly isolated. | The real task reached Agent `READY`; after the profile correction Backend materialized the terminal plan for the client. |
+| P1 | Chat navigation guidance omitted valid destinations such as Inventory and Shopping Lists. | Replaced the stale navigation map with the complete current Web/Android destination set. | Real navigation chat now identifies Inventory and Shopping Lists rather than claiming they are unavailable. |
+
+### 11.2 Automated verification record
+
+| Component | Executed gate | Result |
+|---|---|---:|
+| Backend | JDK 17 `mvnw clean verify` | **PASS - 203 tests, 0 failures/errors** |
+| Web | `npm run validate` | **PASS - API 83/83, lint, typecheck, 78 tests, coverage, production build** |
+| Android | JDK 17 `gradlew clean testDebugUnitTest assembleDebug lintDebug --stacktrace` | **PASS - debug APK built and installed on Pixel 8 Pro emulator** |
+| Recommendation | Ruff, mypy, and pytest | **PASS - 175 passed, 1 Docker-only skip** |
+| Chatbot | Ruff and pytest | **PASS - 8 passed** |
+| Cooking | Ruff, mypy, and pytest | **PASS - 1,219 passed; 92% coverage** |
+| Topology | `python agent-service/scripts/check_local_ports.py` | **PASS - exact owner routes on `8001`, `8002`, `8003`, and `8004`** |
+| Containers | `docker compose config` plus image build/health checks | **PASS - all four intelligence services healthy on their canonical internal and host ports** |
+
+### 11.3 No-mock interactive operation record
+
+The local acceptance stack used Backend profile `local`, PostgreSQL `localhost:5432/foodmind`, the four real intelligence services, Web `4173`, and the installed Android debug APK. No API interception or fake intelligence adapter was active. Existing DeepSeek credentials in the ignored shared `agents/.env` were read by Chatbot, Cooking, and Recommendation only; the value was neither changed nor logged.
+
+| Flow | Web | Android | Persistence/communication evidence |
+|---|---:|---:|---|
+| Login and normal rendering | PASS | PASS | Both terminals authenticated as the same test user without blank page or crash. |
+| Recommendation generation | PASS | PASS | Both rendered `Chana Masala with Rice`; Backend logged `failureCode=NONE`, `modelVersion=hybrid-ranking-v1`; no `Reliable fallback used` banner appeared. |
+| Recommendation explanation fallback | PASS | N/A | With an intentionally invalid temporary provider key, `8004` still returned HTTP 200 and the ML order, using a deterministic explanation instead of Backend fallback. The real ignored credential was not modified. |
+| Inventory synchronization | PASS | PASS | Web created and updated `Codex Test Rice`; Android Cooking read the same Backend inventory lot. |
+| Cloud recipe synchronization | PASS | PASS | Web created `Codex Rice Bowl`; Android Cloud Recipes displayed the same two-serving recipe, ingredient, tag, and step count. |
+| Shopping-list item completion | PASS | PASS | Android generated a Backend shopping list from the missing-ingredient decision, marked the item purchased, saved it, and observed `1/1 purchased`. |
+| Cooking generation and decision | PASS | PASS | Android selected the Web-created server recipe, received `NEEDS_CONFIRMATION`, submitted `Buy missing ingredients`, and the real `8003` async task reached `READY`. |
+| Grounded Chat search | PASS | PASS | Web Search for `Tampines` returned an authorized source; Backend-to-Chatbot and Chatbot-to-Backend tool calls completed without `401`, `404`, or `502`. |
+| Chat reference attachment and summary | PASS | PASS | Re-attaching the introduced source succeeded after the uniqueness repair; Summary resolved the source before generation. |
+| Chat navigation | PASS | PASS | Navigation correctly directed the user to Inventory after the current destination map was deployed. |
+| Page, empty, and filter states | PASS | PASS | Recommendation, inventory, recipe, cooking, shopping, and Chat states rendered explicit content with no crash or blank screen. |
+
+The live recommendation fault-injection result is intentionally classified as an explanation fallback inside `8004`, not a Backend recommendation fallback: candidates, order, scores, reason codes, and model metadata remain owned by Inference and deterministic policy logic.
+
 ## Appendix A — exact client operation differences
 
 **Web-only relative to Android (19):**
