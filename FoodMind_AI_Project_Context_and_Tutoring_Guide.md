@@ -359,7 +359,19 @@ All user-facing functionality passes through Spring Boot. At least one complete 
 ### Explicitly outside the MVP
 
 - Public internet restaurant search
-- Google Maps or other map integration
+
+### Advanced extension: OneMap walking routes
+
+FoodMind may display an embedded **OneMap + Leaflet** map only for a Place that
+already exists in the controlled FoodMind catalogue. A user can explicitly
+allow their current location to request a transient walking route to that
+place. The Backend is the only OneMap Routing API caller; it never persists or
+logs the user's coordinates, and the OneMap token is an environment secret.
+
+This extension does not search the public internet for restaurants, import new
+places, change recommendation ranking, or make food-safety claims. Web and
+Android render the same controlled place marker and route summary.
+
 - Food delivery ordering
 - Payments
 - Public or follower-based social feeds
