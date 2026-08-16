@@ -16,6 +16,37 @@ services:
       retries: 12
     networks: [private]
 
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: foodmind_e2e_media
+      MINIO_ROOT_PASSWORD: foodmind_e2e_media_password
+    ports:
+      - "0.0.0.0:9000:9000"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 18
+    networks: [private]
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      mc alias set local http://minio:9000 foodmind_e2e_media foodmind_e2e_media_password
+      mc mb --ignore-existing local/foodmind-e2e-media
+      mc anonymous set none local/foodmind-e2e-media
+      mc cors set local/foodmind-e2e-media /config/cors.json
+    volumes:
+      - ./minio/cors.json:/config/cors.json:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks: [private]
   model-package:
     image: python:3.13-slim
     working_dir: /ml
@@ -125,12 +156,23 @@ services:
       COOKING_TASK_POLL_INTERVAL: ${FOODMIND_E2E_COOKING_TASK_POLL_INTERVAL:-5s}
       CHAT_AGENT_BASE_URL: http://chat:8001
       CHAT_AGENT_SERVICE_TOKEN: local-chat-token
-      MEDIA_ENABLED: "false"
+      MEDIA_ENABLED: "true"
+      MEDIA_S3_BUCKET: foodmind-e2e-media
+      MEDIA_S3_REGION: us-east-1
+      MEDIA_S3_ENDPOINT: http://minio:9000
+      MEDIA_S3_PUBLIC_ENDPOINT: ${FOODMIND_E2E_MEDIA_PUBLIC_ENDPOINT:-http://10.0.2.2:9000}
+      MEDIA_S3_ACCESS_KEY: foodmind_e2e_media
+      MEDIA_S3_SECRET_KEY: foodmind_e2e_media_password
+      MEDIA_UPLOAD_TTL: 5m
+      MEDIA_READ_TTL: 15m
+      MEDIA_CLEANUP_DELAY: 1m
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       recommendation:
         condition: service_healthy
       cooking:
@@ -164,3 +206,4 @@ networks:
 
 volumes:
   model-package:
+  minio-data:

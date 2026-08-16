@@ -95,6 +95,11 @@ menu prices and dish availability must come from the self-collected menu data.
   evidence-based delivery status report derived from the formal baselines and
   current repository state.
 
+- `operations/production-demo/aws-media-deployment-checklist.md`: AWS-ready
+  private S3, ECS Task Role, CORS, environment, smoke-test, and rollback
+  checklist for enabling Food/Drink Record image delivery.
+
+
 ## Latest Product-Experience Clarification
 
 The formal sources remain authoritative. The current implementation expresses
