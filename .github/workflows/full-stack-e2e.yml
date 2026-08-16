@@ -2,6 +2,31 @@ name: Full real-stack E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      docs_ref:
+        description: foodmind-docs Git ref
+        required: true
+        default: main
+      backend_ref:
+        description: foodmind-backend Git ref
+        required: true
+        default: master
+      web_ref:
+        description: foodmind-web Git ref
+        required: true
+        default: master
+      android_ref:
+        description: foodmind-android Git ref
+        required: true
+        default: master
+      intelligence_ref:
+        description: foodmind-intelligence Git ref
+        required: true
+        default: main
+      ml_ref:
+        description: foodmind-ml Git ref
+        required: true
+        default: main
 
 permissions:
   contents: read
@@ -14,37 +39,43 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: foodmind-team/foodmind-docs
-          ref: fix/e2e-test-blocker-20260811
+          ref: ${{ inputs.docs_ref }}
           path: foodmind-docs
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: foodmind-team/foodmind-backend
-          ref: fix/e2e-test-blocker-20260811
+          ref: ${{ inputs.backend_ref }}
           path: foodmind-backend
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: foodmind-team/foodmind-web
-          ref: fix/e2e-test-blocker-20260811
+          ref: ${{ inputs.web_ref }}
           path: foodmind-web
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: foodmind-team/foodmind-android
-          ref: fix/e2e-test-blocker-20260811
+          ref: ${{ inputs.android_ref }}
           path: foodmind-android
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: foodmind-team/foodmind-intelligence
-          ref: fix/e2e-test-blocker-20260811
+          ref: ${{ inputs.intelligence_ref }}
           path: foodmind-intelligence
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: foodmind-team/foodmind-ml
-          ref: main
+          ref: ${{ inputs.ml_ref }}
           path: foodmind-ml
+
+      - name: Expose the Android emulator host bridge to host Chromium
+        run: |
+          sudo ip address add 10.0.2.2/32 dev lo || true
 
       - name: Build and start the unmocked stack
         working-directory: foodmind-docs/testing/full-stack
-        run: docker compose up --build --wait --wait-timeout 600
+        run: |
+          docker compose config
+          docker compose up --build --wait --wait-timeout 600
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
