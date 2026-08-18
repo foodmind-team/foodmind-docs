@@ -45,12 +45,12 @@ def main() -> None:
     contract_path = Path(configured) if configured else WORKSPACE / "foodmind-backend/src/main/resources/openapi/openapi.yaml"
     if contract_path.is_file():
         count = operation_count(contract_path.read_text(encoding="utf-8"))
-        if count != 84:
-            raise SystemExit(f"Expected 84 backend operations, found {count}")
+        if count != 86:
+            raise SystemExit(f"Expected 86 backend operations, found {count}")
 
     parity_documents = [path for path in markdown if "parity" in path.name.lower() or "end-to-end" in path.name.lower()]
-    if not any("84" in path.read_text(encoding="utf-8") for path in parity_documents):
-        raise SystemExit("Parity documentation does not record the 84-operation contract total")
+    if not any("86" in path.read_text(encoding="utf-8") for path in parity_documents):
+        raise SystemExit("Parity documentation does not record the 86-operation contract total")
     print(f"Parity documentation check passed ({len(markdown)} Markdown files).")
 
 
