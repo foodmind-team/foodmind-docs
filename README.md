@@ -2,6 +2,10 @@
 
 FoodMind Documentation is the cross-repository architecture, contract, operations, delivery-evidence, and project-governance repository for FoodMind. It is not an executable application; use the linked implementation repositories to run the product.
 
+## Live deployment
+
+Explore the deployed FoodMind application at [https://13.229.2.154.sslip.io/](https://13.229.2.154.sslip.io/). This is the public HTTPS entry point for the Web client and the Backend `/api/v1` routes; private AI services remain internal.
+
 ## Repository map
 
 | Repository | Responsibility |
